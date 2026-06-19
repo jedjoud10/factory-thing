@@ -26,6 +26,14 @@ impl Item {
         Self { id, count: 1 }
     }
 
+    const fn full_stack(id: u8) -> Self {
+        Self { id, count: REGISTRY[id as usize].stack_size }
+    }
+
+    const fn new(id: u8, count: u8) -> Self {
+        Self { id, count }
+    }
+
     const fn invalid() -> Self {
         Self { id: 0, count: 0 }
     }
@@ -34,11 +42,17 @@ impl Item {
         self.id == 0 && self.count == 0
     }
 
+    const fn invalidate(&mut self) {
+        *self = Self::invalid();
+    }
+
     const fn accumulate(&mut self, other: &Item) {
-        assert!(self.id == 0 || self.id == other.id);
+        assert!(self.is_invalid() || self.id == other.id);
 
         self.id = other.id;
         self.count += other.count;
+
+        assert!(self.count <= REGISTRY[self.id as usize].stack_size);
     }
 
     const fn take(&mut self, other: &Item) {
@@ -46,7 +60,7 @@ impl Item {
         self.count = self.count.saturating_sub(other.count);
 
         if self.count == 0 {
-            *self = Self::invalid();
+            self.invalidate();
         }
     }
 }
@@ -89,8 +103,22 @@ impl Hatch {
 #[derive(Debug)]
 struct Progress {
     ticks_remaining: NonZeroU16,
+    
+    // used if the machine is being underpowered / inefficient
+    slow_down_ticks_remaining: Option<NonZeroU16>,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+enum MachineStatus {
+    RecipeInputResourcesMismatchOrEmpty,
+    RecipeOutputResourcesMismatchOrFull,
+    
+    Underpowered,
+    NonPowered,
+
+    #[default]
+    None,
+}
 
 #[derive(Default, Debug)]
 struct Machine {
@@ -98,6 +126,7 @@ struct Machine {
     output: Vec<Hatch>,
     recipe: Option<&'static Recipe>,
     progress: Option<Progress>,
+    status: MachineStatus,
     pole: Option<PoleId>,
 }
 
@@ -143,6 +172,13 @@ struct Recipe {
 const CRUSH_IRON_RECIPE: Recipe = Recipe {
     input: &[Item::one(RAW_IRON_1)],
     output: &[Item::one(CRUSHED_IRON)],
+    ticks: 16,
+    load: 10,
+};
+
+const CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE: Recipe = Recipe {
+    input: &[Item::new(RAW_IRON_1, 4)],
+    output: &[Item::new(CRUSHED_IRON, 4)],
     ticks: 16,
     load: 10,
 };
@@ -351,36 +387,81 @@ impl Game {
 
                 dbg!(satisfied_and_target_load);
 
-                // machine is currently progressing through the recipe, take one tick off
-                // TODO: add pause / stop / resume functionality here
-                let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
+                if let Some((satisfied, target)) = satisfied_and_target_load {
+                    if satisfied == 0 {
+                        // "infinite" slow down ticks for machines that are not powered at all
+                        progress.slow_down_ticks_remaining = NonZeroU16::new(u16::MAX);
+                        machine.status = MachineStatus::NonPowered;
+                    } else if satisfied < target {
+                        machine.status = MachineStatus::Underpowered;
 
-                if let Some(non_zero) = non_zero {
-                    // number of ticks is non-zero, update, and continue
-                    progress.ticks_remaining = non_zero;
-                    false
+                        // can only update once this has been reset (in case fluctuating power)
+                        if progress.slow_down_ticks_remaining.is_none() {
+                            // calculate efficiency percentage
+                            let percent = satisfied as f32 / target as f32;
+
+                            // 100% result in 1 ticks (which will get reset immediately after it gets set)
+                            // 50% result in 2 ticks
+                            // 25% result in 4 ticks
+                            let inv = (1.0f32 / percent) as u16;
+                            progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
+                        }
+                    }
                 } else {
-                    // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
-                    // `unwrap` here is safe because the `recipe: Option<&'static Recipe>` should not be set to `None` when a machine is progressing
-                    let recipe = &machine.recipe.unwrap();
+                    // no slow down ticks for machines without poles
+                    progress.slow_down_ticks_remaining = None;
+                }
+                
+                // prioritize slow down ticks first
+                let progress_normally = if let Some(slow_down_ticks) = progress.slow_down_ticks_remaining {
+                    // special case: non powered machines 
+                    if slow_down_ticks.get() == u16::MAX {
+                        false
+                    } else {
+                        // if the decremented slow_down_ticks_remaning is zero, then it will result in None (which works in our favour)
+                        progress.slow_down_ticks_remaining = NonZeroU16::new(slow_down_ticks.get() - 1);
 
-                    // take items from input hatches
-                    for (recipe_input, hatch_input) in
-                        recipe.input.iter().zip(machine.input.iter_mut())
-                    {
-                        hatch_input.buffer.take(recipe_input);
+                        // when this is none, then we have progressed through all slowdown ticks
+                        progress.slow_down_ticks_remaining.is_none()
                     }
-
-                    // put items in output hatches
-                    for (recipe_output, hatch_output) in
-                        recipe.output.iter().zip(machine.output.iter_mut())
-                    {
-                        hatch_output.buffer.accumulate(recipe_output);
-                    }
-
-                    // reset machine progress
-                    machine.progress.take().unwrap();
+                } else {
                     true
+                };
+
+                if progress_normally {
+                    // machine is currently progressing through the recipe, take one tick off
+                    // TODO: add pause / stop / resume functionality here
+                    let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
+
+                    if let Some(non_zero) = non_zero {
+                        // number of ticks is non-zero, update, and continue
+                        progress.ticks_remaining = non_zero;
+                        false
+                    } else {
+                        // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
+                        // `unwrap` here is safe because the `recipe: Option<&'static Recipe>` should not be set to `None` when a machine is progressing
+                        let recipe = &machine.recipe.unwrap();
+
+                        // take items from input hatches
+                        for (recipe_input, hatch_input) in
+                            recipe.input.iter().zip(machine.input.iter_mut())
+                        {
+                            hatch_input.buffer.take(recipe_input);
+                        }
+
+                        // put items in output hatches
+                        for (recipe_output, hatch_output) in
+                            recipe.output.iter().zip(machine.output.iter_mut())
+                        {
+                            hatch_output.buffer.accumulate(recipe_output);
+                        }
+
+                        // reset machine progress
+                        machine.progress.take().unwrap();
+                        true
+                    }
+                } else {
+                    false
                 }
             } else {
                 true
@@ -396,6 +477,8 @@ impl Game {
                     };
                 }
 
+                machine.status = MachineStatus::None;
+
                 if let Some(recipe) = machine.recipe {
                     assert_eq!(recipe.input.len(), machine.input.len());
                     assert_eq!(recipe.output.len(), machine.output.len());
@@ -410,15 +493,27 @@ impl Game {
                     let outputs_match_recipe_output =
                         recipe.output.iter().zip(machine.output.iter()).all(
                             |(recipe_output_item, output_hatch)| {
-                                output_hatch.buffer.id == recipe_output_item.id
-                                    || output_hatch.buffer.is_invalid()
+                                if output_hatch.buffer.is_invalid() {
+                                    return true;
+                                }
+
+                                // if the item is the same, must make sure that we have enough space in the hatch to place it 
+                                let same_id = output_hatch.buffer.id == recipe_output_item.id;
+                                let stack_size = REGISTRY[output_hatch.buffer.id as usize].stack_size;
+
+                                // this CAN overflow if stack size is at MAX
+                                // if we know it will overflow, then we cannot process the recipe
+                                let opt_non_overflowing_enough_space_considering_stack_size = output_hatch.buffer.count.checked_add(recipe_output_item.count).map(|x| x <= stack_size);
+                                same_id && opt_non_overflowing_enough_space_considering_stack_size.unwrap_or_default()
                             },
                         );
 
+                    // if requirements are met, then we can begin machine progress
                     if inputs_match_recipe_input && outputs_match_recipe_output {
                         let _ = machine.progress.insert(Progress {
                             ticks_remaining: NonZeroU16::new(recipe.ticks)
                                 .expect("recipe ticks must not be zero"),
+                            slow_down_ticks_remaining: None,
                         });
 
                         // set the machine's consumer pole to enabled state
@@ -429,6 +524,14 @@ impl Game {
                                 current_load: 0,
                             };
                             dbg!(&self.poles[*consumer_pole_id]);
+                        }
+                    } else {
+                        if !inputs_match_recipe_input {
+                            machine.status = MachineStatus::RecipeInputResourcesMismatchOrEmpty;
+                        }
+
+                        if !outputs_match_recipe_output {
+                            machine.status = MachineStatus::RecipeOutputResourcesMismatchOrFull;
                         }
                     }
                 }
@@ -456,7 +559,7 @@ impl Game {
             // belt end
             let input_hatch = &machines[end].input[end_hatch_index];
 
-            let belt_has_input = !output_hatch.buffer.is_invalid();
+            // let belt_has_input = !output_hatch.buffer.is_invalid();
             let belt_free_output = input_hatch.buffer.is_invalid()
                 || input_hatch.buffer.id
                     == buffer
@@ -922,6 +1025,171 @@ mod tests {
             matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == CRUSH_IRON_RECIPE.load)
         );
         assert!(game.wires[0].flow == 10);
+        assert!(matches!(game.machines[0].status, MachineStatus::None));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_none() ));
+    }
+
+    #[test]
+    fn simple_machine_underpowered() {
+        let mut game = Game {
+            poles: vec![
+                Pole::Generator {
+                    max_load: 2,
+                    current_load: 0,
+                },
+                Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                },
+            ],
+            wires: vec![wire(0, 1)],
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                progress: None,
+                pole: Some(PoleId::from(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // no power yet
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[1],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // first tick simply sets recipe and TARGET load of consumer
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_some());
+
+        game.tick();
+
+        dbg!(&game.poles);
+
+        // second tick actually propagates power generation
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 2,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == 2)
+        );
+        assert!(game.wires[0].flow == 2);
+        assert!(matches!(game.machines[0].status, MachineStatus::Underpowered));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_some() ));        
+    }
+
+    
+    #[test]
+    fn simple_machine_non_powered() {
+        let mut game = Game {
+            poles: vec![
+                Pole::Generator {
+                    max_load: 0,
+                    current_load: 0,
+                },
+                Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                },
+            ],
+            wires: vec![wire(0, 1)],
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                progress: None,
+                pole: Some(PoleId::from(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // no power yet
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[1],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // first tick simply sets recipe and TARGET load of consumer
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_some());
+
+        game.tick();
+
+        dbg!(&game.poles);
+
+        // second tick actually propagates power generation
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == 0)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(matches!(game.machines[0].status, MachineStatus::NonPowered));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining == NonZeroU16::new(u16::MAX) ));        
     }
 
     #[test]
@@ -969,7 +1237,7 @@ mod tests {
 
             assert!(game.machines[0].progress.is_some());
             assert!(
-                matches!(game.machines[0].progress, Some(Progress { ticks_remaining }) if ticks_remaining == NonZeroU16::new(expected_ticks_remaining).unwrap())
+                matches!(game.machines[0].progress, Some(Progress { ticks_remaining, .. }) if ticks_remaining == NonZeroU16::new(expected_ticks_remaining).unwrap())
             );
 
             game.tick();
@@ -1055,8 +1323,9 @@ mod tests {
         assert!(matches!(
             game.machines[0].progress,
             Some(Progress {
-                ticks_remaining: initial_ticks
-            })
+                ticks_remaining,
+                ..
+            }) if initial_ticks == ticks_remaining
         ));
 
         // tick through recipe ticks...
@@ -1103,5 +1372,95 @@ mod tests {
             game.machines[0].output[0].buffer.count,
             CRUSH_IRON_RECIPE.output[0].count * batch_count
         );
+    }
+
+    #[test]
+    fn craft_missing_inputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::empty()],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+
+        game.tick();
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeInputResourcesMismatchOrEmpty);
+    }
+
+    
+    #[test]
+    fn craft_missing_inputs_partial() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::item(RAW_IRON_1, 1)],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+
+        game.tick();
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeInputResourcesMismatchOrEmpty);
+    }
+
+    #[test]
+    fn craft_full_stack_outputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch { buffer: CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.input[0] }],
+                output: vec![Hatch { buffer: Item::full_stack(CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.output[0].id) }],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert_eq!(game.machines[0].status, MachineStatus::None);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeOutputResourcesMismatchOrFull);
+    }
+
+    #[test]
+    fn craft_full_mismatch_id_outputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch { buffer: CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.input[0] }],
+                output: vec![Hatch { buffer: Item::full_stack(IRON_DUST) }],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert_eq!(game.machines[0].status, MachineStatus::None);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        assert!(game.machines[0].progress.is_none());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeOutputResourcesMismatchOrFull);
     }
 }
