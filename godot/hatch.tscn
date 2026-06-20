@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://cdqcnjqngif53"]
+
+[ext_resource type="Script" uid="uid://d0ywp5mx11pif" path="res://hatch.gd" id="1_ybbri"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ybbri"]
+
+[node name="Hatch" type="Node3D" unique_id=276232919]
+script = ExtResource("1_ybbri")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=345589870]
+size = Vector3(1, 1, 0.1)
+material = SubResource("StandardMaterial3D_ybbri")

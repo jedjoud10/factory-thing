@@ -1,0 +1,831 @@
+use super::*;
+
+mod power_tests {
+    use super::*;
+    
+
+    #[test]
+    fn simple_power() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let b = game.add_consumer(10);
+        game.add_wire(a, b);
+
+        game.tick();
+
+        assert!(matches!(
+            game.poles[*a],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*b],
+            Pole::Consumer {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 10);
+    }
+
+    #[test]
+    fn simple_power_inv() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let b = game.add_consumer(10);
+        game.add_wire(b, a);
+
+        game.tick();
+        assert!(matches!(
+            game.poles[*a],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*b],
+            Pole::Consumer {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == -10);
+    }
+
+    #[test]
+    fn simple_power_inv_2() {
+        let mut game = Game::default();
+        let b = game.add_consumer(10);
+        let a = game.add_generator(10);
+        game.add_wire(a, b);
+
+        game.tick();
+        assert!(matches!(
+            game.poles[1],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[0],
+            Pole::Consumer {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 10);
+    }
+
+    #[test]
+    fn poles_not_connected() {
+        let mut game = Game::default();
+        let _ = game.add_consumer(10);
+        let _ = game.add_generator(10);
+        game.tick();
+    }
+
+    #[test]
+    fn overloaded_wire() {
+        let mut game = Game::default();
+        let b = game.add_consumer(10);
+        let a = game.add_generator(10);
+        game.add_wire_with_max_flow(a, b, 1);
+
+        assert_eq!(game.wires[0].damage, 0);
+
+        game.tick();
+        assert!(matches!(
+            game.poles[1],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[0],
+            Pole::Consumer {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 10);
+        assert_eq!(game.wires[0].damage, 0);
+
+        for _ in 0..254 {
+            game.tick();
+        }
+
+        assert_eq!(game.wires[0].damage, 254);
+
+        game.tick();
+
+        assert_eq!(game.wires.len(), 0);
+        assert!(matches!(
+            game.poles[1],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[0],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn simple_power_split_load_equally() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let b = game.add_consumer(5);
+        let c = game.add_consumer(5);
+        
+        game.add_wire(a,b);
+        game.add_wire(a,c);
+        
+
+        game.tick();
+        assert!(matches!(
+            game.poles[*a],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*b],
+            Pole::Consumer {
+                current_load: 5,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*c],
+            Pole::Consumer {
+                current_load: 5,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 5);
+        assert!(game.wires[1].flow == 5);
+    }
+
+    #[test]
+    fn simple_power_split_load_inequally() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let b = game.add_consumer(7);
+        let c = game.add_consumer(3);
+        
+        game.add_wire(a,b);
+        game.add_wire(a,c);
+
+        game.tick();
+        assert!(matches!(
+            game.poles[*a],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*b],
+            Pole::Consumer {
+                current_load: 7,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[*c],
+            Pole::Consumer {
+                current_load: 3,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 7);
+        assert!(game.wires[1].flow == 3);
+    }
+
+    #[allow(dead_code)]
+    fn wire(a: usize, b: usize) -> Wire {
+        Wire {
+            a: PoleId::from(a),
+            b: PoleId::from(b),
+            flow: 0,
+            damage: 0,
+            max_flow: LoadUnit::MAX
+        }
+    }
+
+    #[test]
+    fn simple_power_chain() {
+        let mut poles = vec![];
+        poles.push(Pole::Generator {
+            max_load: 10,
+            current_load: 0,
+        });
+        poles.extend(std::iter::repeat_with(|| Pole::Other).take(32));
+        poles.push(Pole::Consumer {
+            target_load: 10,
+            current_load: 0,
+        });
+
+        let wires = (0..33)
+            .into_iter()
+            .map(|i| wire(i, i + 1))
+            .collect::<Vec<_>>();
+
+        let mut game = Game {
+            poles,
+            wires,
+            ..Default::default()
+        };
+
+        for wire in game.wires.iter() {
+            assert_eq!(wire.flow, 0);
+        }
+
+        for pole in game.poles.iter() {
+            match pole {
+                Pole::Generator { current_load, .. } => assert_eq!(*current_load, 0),
+                Pole::Consumer { current_load, .. } => assert_eq!(*current_load, 0),
+                Pole::Other => {}
+            };
+        }
+
+        game.tick();
+
+        for wire in game.wires.iter() {
+            assert_eq!(wire.flow, 10);
+        }
+
+        for pole in game.poles.iter() {
+            match pole {
+                Pole::Generator { current_load, .. } => assert_eq!(*current_load, 10),
+                Pole::Consumer { current_load, .. } => assert_eq!(*current_load, 10),
+                Pole::Other => {}
+            };
+        }
+    }
+}
+
+mod tests {
+    use std::num::NonZeroU16;
+
+    use super::*;
+    #[allow(dead_code)]
+    fn wire(a: usize, b: usize) -> Wire {
+        Wire {
+            a: PoleId::from(a),
+            b: PoleId::from(b),
+            flow: 0,
+            damage: 0,
+            max_flow: LoadUnit::MAX
+        }
+    }
+
+    #[allow(dead_code)]
+    fn placeholder_machine_with_output_hatch(tmp: Item) -> Machine {
+        Machine {
+            output: vec![Hatch { buffer: tmp }],
+            ..Default::default()
+        }
+    }
+
+    #[allow(dead_code)]
+    fn placeholder_machine_with_input_hatch(tmp: Item) -> Machine {
+        Machine {
+            input: vec![Hatch { buffer: tmp }],
+            ..Default::default()
+        }
+    }
+
+
+    #[test]
+    fn empty() {
+        Game::default().tick();
+    }
+
+    #[test]
+    fn simple_machine_power() {
+        let mut game = Game {
+            poles: vec![
+                Pole::Generator {
+                    max_load: 10,
+                    current_load: 0,
+                },
+                Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                },
+            ],
+            wires: vec![wire(0, 1)],
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                progress: None,
+                pole: Some(PoleId::from(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // no power yet
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[1],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // first tick simply sets recipe and TARGET load of consumer
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_some());
+
+        game.tick();
+
+        dbg!(&game.poles);
+
+        // second tick actually propagates power generation
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 10,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 10);
+        assert!(matches!(game.machines[0].status, MachineStatus::None));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_none() ));
+    }
+
+    #[test]
+    fn simple_machine_underpowered() {
+        let mut game = Game {
+            poles: vec![
+                Pole::Generator {
+                    max_load: 2,
+                    current_load: 0,
+                },
+                Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                },
+            ],
+            wires: vec![wire(0, 1)],
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                progress: None,
+                pole: Some(PoleId::from(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // no power yet
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[1],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // first tick simply sets recipe and TARGET load of consumer
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_some());
+
+        game.tick();
+
+        dbg!(&game.poles);
+
+        // second tick actually propagates power generation
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 2,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == 2)
+        );
+        assert!(game.wires[0].flow == 2);
+        assert!(matches!(game.machines[0].status, MachineStatus::Underpowered));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_some() ));        
+    }
+
+    
+    #[test]
+    fn simple_machine_non_powered() {
+        let mut game = Game {
+            poles: vec![
+                Pole::Generator {
+                    max_load: 0,
+                    current_load: 0,
+                },
+                Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                },
+            ],
+            wires: vec![wire(0, 1)],
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                progress: None,
+                pole: Some(PoleId::from(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // no power yet
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[1],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // first tick simply sets recipe and TARGET load of consumer
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(game.machines[0].progress.is_some());
+
+        game.tick();
+
+        dbg!(&game.poles);
+
+        // second tick actually propagates power generation
+        assert!(matches!(
+            game.poles[0],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(
+            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == 0)
+        );
+        assert!(game.wires[0].flow == 0);
+        assert!(matches!(game.machines[0].status, MachineStatus::NonPowered));
+        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining == NonZeroU16::new(u16::MAX) ));        
+    }
+
+    #[test]
+    fn simple_machine_missing_input_ingredients() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::empty()],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        // still none because the input hatch does not have the required input
+        assert!(game.machines[0].progress.is_none());
+    }
+
+    #[test]
+    fn correct_tick_amount() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch {
+                    buffer: CRUSH_IRON_RECIPE.input[0],
+                }],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        assert!(game.machines[0].progress.is_none());
+
+        // first tick will set the PROGRESS ticks to `CRUSH_IRON_RECIPE.ticks``
+        game.tick();
+
+        // elapsed `CRUSH_IRON_RECIPE.ticks`-1...
+        for i in 0..(CRUSH_IRON_RECIPE.ticks - 1) {
+            let expected_ticks_remaining = CRUSH_IRON_RECIPE.ticks - i;
+
+            assert!(game.machines[0].progress.is_some());
+            assert!(
+                matches!(game.machines[0].progress, Some(Progress { ticks_remaining, .. }) if ticks_remaining == NonZeroU16::new(expected_ticks_remaining).unwrap())
+            );
+
+            game.tick();
+        }
+
+        game.tick();
+
+        // should now be none because in TOTAL ever since the first tick, CRUSH_IRON_RECIPE.ticks have occurred
+        assert!(game.machines[0].progress.is_none());
+    }
+
+    #[test]
+    fn belt_simple_test() {
+        let belts = vec![Belt {
+            belt_start: HatchReference {
+                machine_index: 0,
+                hatch_index: 0,
+            },
+            belt_end: HatchReference {
+                machine_index: 1,
+                hatch_index: 0,
+            },
+            buffer: vec![Item::invalid(); 64],
+        }];
+
+        let mut game = Game {
+            machines: vec![
+                placeholder_machine_with_output_hatch(Item {
+                    id: IRON_DUST,
+                    count: 1,
+                }),
+                placeholder_machine_with_input_hatch(Item::invalid()),
+            ],
+            belts,
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.belts[0].buffer[0].is_invalid());
+
+        for i in 0..65 {
+            println!("starting tick {i}");
+            game.tick();
+
+            for buffer_element_index in 0..64 {
+                dbg!(buffer_element_index);
+                let item = game.belts[0].buffer[buffer_element_index];
+                dbg!(item);
+
+                if buffer_element_index == i {
+                    assert_eq!(item.id, IRON_DUST);
+                    assert_eq!(item.count, 1);
+                } else {
+                    assert!(item.is_invalid());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn craft_tick_order() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::item(RAW_IRON_1, CRUSH_IRON_RECIPE.input[0].count)],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+        assert!(game.machines[0].progress.is_none());
+
+        assert_eq!(game.machines[0].input[0].buffer, CRUSH_IRON_RECIPE.input[0]);
+
+        // first tick to start the recipe process
+        game.tick();
+
+        let initial_ticks = NonZeroU16::new(CRUSH_IRON_RECIPE.ticks).unwrap();
+        assert!(matches!(
+            game.machines[0].progress,
+            Some(Progress {
+                ticks_remaining,
+                ..
+            }) if initial_ticks == ticks_remaining
+        ));
+
+        // tick through recipe ticks...
+        for _ in 0..(initial_ticks.get()) {
+            game.tick();
+        }
+
+        assert!(game.machines[0].input[0].buffer.is_invalid());
+        assert!(game.machines[0].progress.is_none());
+
+        assert_eq!(
+            game.machines[0].output[0].buffer,
+            CRUSH_IRON_RECIPE.output[0]
+        );
+    }
+
+    #[test]
+    fn craft_batch() {
+        let batch_count = 10;
+
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::item(
+                    RAW_IRON_1,
+                    batch_count * CRUSH_IRON_RECIPE.input[0].count,
+                )],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+
+        for _ in 0..(CRUSH_IRON_RECIPE.ticks as usize * (batch_count as usize + 1)) {
+            game.tick();
+        }
+
+        assert_eq!(game.machines[0].output[0].buffer.id, CRUSHED_IRON);
+        assert_eq!(
+            game.machines[0].output[0].buffer.count,
+            CRUSH_IRON_RECIPE.output[0].count * batch_count
+        );
+    }
+
+    #[test]
+    fn craft_missing_inputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::empty()],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+
+        game.tick();
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeInputResourcesMismatchOrEmpty);
+    }
+
+    
+    #[test]
+    fn craft_missing_inputs_partial() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch::item(RAW_IRON_1, 1)],
+                output: vec![Hatch::empty()],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+
+        game.tick();
+
+        assert!(game.machines[0].output[0].buffer.is_invalid());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeInputResourcesMismatchOrEmpty);
+    }
+
+    #[test]
+    fn craft_full_stack_outputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch { buffer: CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.input[0] }],
+                output: vec![Hatch { buffer: Item::full_stack(CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.output[0].id) }],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert_eq!(game.machines[0].status, MachineStatus::None);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeOutputResourcesMismatchOrFull);
+    }
+
+    #[test]
+    fn craft_full_mismatch_id_outputs() {
+        let mut game = Game {
+            machines: vec![Machine {
+                input: vec![Hatch { buffer: CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE.input[0] }],
+                output: vec![Hatch { buffer: Item::full_stack(IRON_DUST) }],
+                recipe: Some(&CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE),
+                ..Default::default()
+            }],
+            belts: vec![],
+            poles: vec![],
+            wires: vec![],
+        };
+
+        assert_eq!(game.machines[0].status, MachineStatus::None);
+        assert!(game.machines[0].progress.is_none());
+
+        game.tick();
+
+        assert!(game.machines[0].progress.is_none());
+        assert_eq!(game.machines[0].status, MachineStatus::RecipeOutputResourcesMismatchOrFull);
+    }
+}
