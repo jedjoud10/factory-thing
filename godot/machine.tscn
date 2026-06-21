@@ -1,12 +1,14 @@
 [gd_scene format=3 uid="uid://tutiyjxgw5nq"]
 
+[ext_resource type="Script" uid="uid://dnm6bgitt6tj7" path="res://machine.gd" id="1_q015e"]
 [ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://power_pole.tscn" id="2_13m1l"]
 [ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://hatch.tscn" id="2_q015e"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
 size = Vector3(1, 1.0019531, 2.0927734)
 
-[node name="Machine" type="Node3D" unique_id=2009689961]
+[node name="Machine" type="Node3D" unique_id=2009689961 groups=["actors", "machines"]]
+script = ExtResource("1_q015e")
 
 [node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=919800609]
 

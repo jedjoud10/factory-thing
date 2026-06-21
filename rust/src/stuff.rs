@@ -3,16 +3,20 @@ use std::{
     num::NonZeroU16,
 };
 
+use slotmap::{SlotMap, new_key_type};
+
+
+
+
 use crate::items::*;
 use crate::handle::*;
 
-pub type MachineId = usize;
 pub type LoadUnit = isize;
 pub type HealthUnit = u8;
 
 #[derive(Debug)]
 pub struct HatchReference {
-    pub machine_index: MachineId,
+    pub machine_index: MachineKey,
 
     // we inherently know if this is an Input or Output hatch since the Belt stores the belt_start and belt_end information
     // ex: belt_end could only refer to input hatches since that's the only hatch direction they can connect to
@@ -72,7 +76,7 @@ pub struct Machine {
     pub recipe: Option<&'static Recipe>,
     pub progress: Option<Progress>,
     pub status: MachineStatus,
-    pub pole: Option<PoleId>,
+    pub pole: Option<PoleKey>,
 }
 
 pub const RAW_IRON_1: u8 = 1;
@@ -162,8 +166,8 @@ pub enum Pole {
 
 #[derive(Debug)]
 pub struct Wire {
-    pub a: PoleId,
-    pub b: PoleId,
+    pub a: PoleKey,
+    pub b: PoleKey,
     pub flow: LoadUnit,
     pub max_flow: LoadUnit,
     pub damage: HealthUnit,
@@ -171,10 +175,10 @@ pub struct Wire {
 
 #[derive(Default)]
 pub struct Game {
-    pub machines: Vec<Machine>,
-    pub belts: Vec<Belt>,
-    pub poles: Vec<Pole>,
-    pub wires: Vec<Wire>,
+    pub machines: SlotMap<MachineKey, Machine>,
+    pub belts: SlotMap<BeltKey, Belt>,
+    pub poles: SlotMap<PoleKey, Pole>,
+    pub wires: SlotMap<WireKey, Wire>,
 }
 
 impl Game {
@@ -185,29 +189,29 @@ impl Game {
         let wires = &mut self.wires;
 
         // before we reset wire flow, check for max flow and do damage tick
-        for wire in wires.iter_mut() {
+        for wire in wires.values_mut() {
             if wire.flow.abs() > wire.max_flow {
                 wire.damage = wire.damage.saturating_add(1);
             }
         }
 
-        wires.retain(|w| w.damage < u8::MAX);
+        wires.retain(|_, w| w.damage < u8::MAX);
 
         // create adjacency map that stores neighbouring poles
-        let mut lookup = HashMap::<PoleId, Vec<(PoleId, WireId)>>::new();
-        for (wire_index, Wire { a, b, .. }) in wires.iter().enumerate() {
+        let mut lookup = HashMap::<PoleKey, Vec<(PoleKey, WireKey)>>::new();
+        for (wire_key, Wire { a, b, .. }) in wires.iter() {
             lookup
                 .entry(*a)
                 .or_default()
-                .push((*b, WireId::from_raw(wire_index)));
+                .push((*b, wire_key));
             lookup
                 .entry(*b)
                 .or_default()
-                .push((*a, WireId::from_raw(wire_index)));
+                .push((*a, wire_key));
         }
 
         // reset load of poles
-        for pole in poles.iter_mut() {
+        for pole in poles.values_mut() {
             match pole {
                 Pole::Generator { current_load, .. } => {
                     *current_load = 0;
@@ -220,17 +224,16 @@ impl Game {
         }
 
         // reset wire flow
-        for wire in wires.iter_mut() {
+        for wire in wires.values_mut() {
             wire.flow = 0;
         }
 
         // get all pole consumers
         let consumers = poles
             .iter()
-            .enumerate()
             .filter_map(|(index, pole)| {
                 if let Pole::Consumer { target_load, .. } = pole {
-                    Some((PoleId::from_raw(index), *target_load))
+                    Some((index, *target_load))
                 } else {
                     None
                 }
@@ -242,11 +245,11 @@ impl Game {
             assert!(consumer_target_load >= 0);
             let mut consumer_current_load = 0;
 
-            let mut backtracking = HashMap::<PoleId, (PoleId, WireId)>::new();
-            let mut generators_used = HashSet::<(PoleId, LoadUnit)>::new();
-            let mut visited = HashSet::<PoleId>::new();
+            let mut backtracking = HashMap::<PoleKey, (PoleKey, WireKey)>::new();
+            let mut generators_used = HashSet::<(PoleKey, LoadUnit)>::new();
+            let mut visited = HashSet::<PoleKey>::new();
 
-            let mut queue = VecDeque::<PoleId>::new();
+            let mut queue = VecDeque::<PoleKey>::new();
 
             // in case of pole but not connected to anything
             if lookup.contains_key(&consumer_index) {
@@ -268,7 +271,7 @@ impl Game {
                         break 'pathfind;
                     }
 
-                    let neighbour = &mut poles[**neighbour_index];
+                    let neighbour = &mut poles[*neighbour_index];
 
                     if visited.insert(*neighbour_index) {
                         match neighbour {
@@ -302,7 +305,7 @@ impl Game {
                 }
             }
 
-            match &mut poles[*consumer_index] {
+            match &mut poles[consumer_index] {
                 Pole::Consumer { current_load, .. } => {
                     *current_load = consumer_current_load;
                 }
@@ -321,15 +324,15 @@ impl Game {
                     if let Some((new_pole_id, wire_index)) = backtracking.get(&pole).copied() {
                         opt_pole = Some(new_pole_id);
 
-                        let wire = &mut wires[*wire_index];
+                        let wire = &mut wires[wire_index];
                         if wire.a == pole && wire.b == new_pole_id {
                             // `a` is closer to gen
                             // `b` is closer to con
-                            wires[*wire_index].flow += load; // flow from `a` to `b` is positive
+                            wires[wire_index].flow += load; // flow from `a` to `b` is positive
                         } else if wire.b == pole && wire.a == new_pole_id {
                             // `a` is closer to con
                             // `b` is closer to gen
-                            wires[*wire_index].flow -= load; // flow from `a` to `b` is negative
+                            wires[wire_index].flow -= load; // flow from `a` to `b` is negative
                         } else {
                             unreachable!();
                         }
@@ -338,10 +341,10 @@ impl Game {
             }
         }
 
-        for machine in machines.iter_mut() {
+        for machine in machines.values_mut() {
             let reset_progress = if let Some(progress) = machine.progress.as_mut() {
                 let satisfied_and_target_load =
-                    machine.pole.map(|pole_id| match self.poles[*pole_id] {
+                    machine.pole.map(|pole_id| match self.poles[pole_id] {
                         Pole::Consumer {
                             target_load,
                             current_load,
@@ -432,7 +435,7 @@ impl Game {
             if reset_progress {
                 // reset consumption pole
                 if let Some(consumer_pole_id) = machine.pole {
-                    self.poles[*consumer_pole_id] = Pole::Consumer {
+                    self.poles[consumer_pole_id] = Pole::Consumer {
                         target_load: 0,
                         current_load: 0,
                     };
@@ -479,7 +482,7 @@ impl Game {
 
                         // set the machine's consumer pole to enabled state
                         if let Some(consumer_pole_id) = machine.pole {
-                            self.poles[*consumer_pole_id] = Pole::Consumer {
+                            self.poles[consumer_pole_id] = Pole::Consumer {
                                 target_load: recipe.load,
                                 current_load: 0,
                             };
@@ -497,7 +500,7 @@ impl Game {
             }
         }
 
-        for belt in belts.iter_mut() {
+        for belt in belts.values_mut() {
             let Belt {
                 belt_start:
                     HatchReference {
@@ -546,80 +549,73 @@ impl Game {
             }
         }
     }
-    
-    pub fn add_machine(&mut self, recipe: &'static Recipe) -> (MachineId, PoleId) {
-        let pole_id = self.poles.len();
-        self.poles.push(Pole::Consumer { target_load: 0, current_load: 0 });
+}
+
+impl Game {
+    pub fn add_machine(&mut self, recipe: &'static Recipe) -> (MachineKey, PoleKey) {
+        let pole_id = self.poles.insert(Pole::Consumer { target_load: 0, current_load: 0 });
 
         let machine = Machine {
             input: vec![Hatch::empty()],
             output: vec![Hatch::empty()],
             recipe: Some(&recipe),
             progress: None,
-            pole: Some(PoleId::from(pole_id)),
+            pole: Some(pole_id),
             ..Default::default()
         };
 
-        let machine_id = self.machines.len();
-        self.machines.push(machine);
-        (machine_id, PoleId::from(pole_id))
+        let machine_id = self.machines.insert(machine);
+        (machine_id, pole_id)
     }
     
-    pub fn add_infinite_generator(&mut self) -> PoleId {
+    pub fn add_infinite_generator(&mut self) -> PoleKey {
         self.add_generator(LoadUnit::MAX)
     }
-
     
-    pub fn add_generator(&mut self, max_load: LoadUnit) -> PoleId {
-        let pole_id = self.poles.len();
-        self.poles.push(Pole::Generator { max_load, current_load: 0 });
-        PoleId::from(pole_id)
+    pub fn add_generator(&mut self, max_load: LoadUnit) -> PoleKey {
+        self.poles.insert(Pole::Generator { max_load, current_load: 0 })
     }
 
-    pub fn add_consumer(&mut self, target_load: LoadUnit) -> PoleId {
-        let pole_id = self.poles.len();
-        self.poles.push(Pole::Consumer { target_load, current_load: 0 });
-        PoleId::from(pole_id)
+    pub fn add_consumer(&mut self, target_load: LoadUnit) -> PoleKey {
+        self.poles.insert(Pole::Consumer { target_load, current_load: 0 })
     }
 
-    pub fn add_pole(&mut self) -> PoleId {
-        let pole_id = self.poles.len();
-        self.poles.push(Pole::Other);
-        PoleId::from(pole_id)
+    pub fn add_pole(&mut self) -> PoleKey {
+        self.poles.insert(Pole::Other)
     }
     
-    pub fn add_wire_with_max_flow(&mut self, a: PoleId, b: PoleId, max_flow: LoadUnit) {
-        if self.wires.iter().any(|wire| (wire.a == a && wire.b == b) || (wire.b == a && wire.a == b)) {
+    pub fn add_wire_with_max_flow(&mut self, a: PoleKey, b: PoleKey, max_flow: LoadUnit) -> WireKey {
+        if self.wires.values().any(|wire| (wire.a == a && wire.b == b) || (wire.b == a && wire.a == b)) {
             panic!("cannot add duplicate wire");
         }
 
-        self.wires.push(Wire {
+        self.wires.insert(Wire {
             a, b,
             flow: 0,
             damage: 0,
             max_flow,
-        });
+        })
     }
 
-    pub fn add_wire(&mut self, a: PoleId, b: PoleId) {
-        self.add_wire_with_max_flow(a, b, LoadUnit::MAX);
+    pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
+        self.add_wire_with_max_flow(a, b, LoadUnit::MAX)
     }
 
-    pub fn add_wire_chain(&mut self, poles: &[PoleId]) {
-        for window in poles.windows(2) {
-            self.add_wire(window[0], window[1]);
-        }
+    pub fn add_wire_chain(&mut self, poles: &[PoleKey]) -> Vec<WireKey> {
+        poles.windows(2).into_iter().map(|window| {
+            self.add_wire(window[0], window[1])
+        }).collect::<Vec<WireKey>>()
     }
 
-    pub fn add_belt(&mut self, output_hatch: HatchReference, input_hatch: HatchReference) {
-        self.belts.push(Belt {
+    pub fn add_belt(&mut self, output_hatch: HatchReference, input_hatch: HatchReference) -> BeltKey {
+        self.belts.insert(Belt {
             belt_start: output_hatch,
             belt_end: input_hatch,
             buffer: vec![Item::invalid(); 8],
         })
     }
     
-    pub fn get_input_hatch_mut(&mut self, machine_id: usize, hatch_index: usize) -> &mut Item {
+    pub fn get_input_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
         &mut self.machines[machine_id].input[hatch_index].buffer
     }
 }

@@ -3,7 +3,7 @@
 [sub_resource type="BoxShape3D" id="BoxShape3D_mi0i3"]
 size = Vector3(0.2, 0.66412354, 0.2)
 
-[node name="PowerPole" type="Node3D" unique_id=502923269]
+[node name="PowerPole" type="Node3D" unique_id=502923269 groups=["actors", "power_pole"]]
 
 [node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=1630155557]
 

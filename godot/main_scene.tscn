@@ -89,3 +89,5 @@ mesh = SubResource("BoxMesh_gyfs4")
 
 [node name="Machine" parent="." unique_id=2009689961 instance=ExtResource("2_2c62f")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.00347, 0.9999999, 3.143793)
+
+[node name="FactoryManager" type="FactoryManager" parent="." unique_id=1425192706]

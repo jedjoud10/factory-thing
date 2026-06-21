@@ -8,6 +8,8 @@ extends CharacterBody3D
 @onready var camera = $"Camera3D"
 @onready var raycaster = $"Camera3D/RayCast3D"
 
+
+
 var accumulated_mouse = Vector2.ZERO
 
 func _ready() -> void:
@@ -52,18 +54,51 @@ func _process(delta: float) -> void:
 	
 	pass
 
+enum ActorType {
+	Machine,
+	PowerPole
+}
+
+
+var selected_actor_type: ActorType = ActorType.Machine
+
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event.is_action_pressed("place_machine"):
-		place_machine()
+	elif event.is_action_pressed("place_actor"):
+		place_actor()
+	elif event.is_action_pressed("remove_actor"):
+		remove_actor()
+	elif event.is_action_pressed("select_machine_as_actor"):
+		selected_actor_type = ActorType.Machine
+	elif event.is_action_pressed("select_pole_as_actor"):
+		selected_actor_type = ActorType.PowerPole	
 	elif event is InputEventMouseMotion:
 		accumulated_mouse += event.relative * sens
 		
-var scene = preload("res://machine.tscn")
+var machine_scene = preload("res://machine.tscn")
+var power_pole_scene = preload("res://power_pole.tscn")
+
 		
-func place_machine() -> void:
-	var instance = scene.instantiate()
+func place_actor() -> void:
+	var instance = null
+	
+	match selected_actor_type:
+		ActorType.Machine:
+			instance = machine_scene.instantiate()
+		ActorType.PowerPole:
+			instance = power_pole_scene.instantiate()
+	
 	var node = instance as Node3D
-	node.position = raycaster.get_collision_point()
-	get_tree().root.add_child(instance)
+	node.position += raycaster.get_collision_point() + Vector3(0, 0.5, 0)
+	get_tree().root.get_child(0).add_child(instance)
+	
+func remove_actor() -> void: 
+	var collider = raycaster.get_collider()
+	
+	if (collider == null):
+		return
+	
+	var parent = collider.get_parent();
+	if (parent.is_in_group("actors")):
+		parent.queue_free()
