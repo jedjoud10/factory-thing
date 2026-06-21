@@ -552,6 +552,21 @@ impl Game {
 }
 
 impl Game {
+    pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
+        self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
+
+        let machine = Machine {
+            input: vec![Hatch::empty()],
+            output: vec![Hatch::empty()],
+            recipe: Some(&recipe),
+            progress: None,
+            pole: Some(pole_key),
+            ..Default::default()
+        };
+
+        self.machines.insert(machine)
+    }
+
     pub fn add_machine(&mut self, recipe: &'static Recipe) -> (MachineKey, PoleKey) {
         let pole_id = self.poles.insert(Pole::Consumer { target_load: 0, current_load: 0 });
 
@@ -583,6 +598,10 @@ impl Game {
     pub fn add_pole(&mut self) -> PoleKey {
         self.poles.insert(Pole::Other)
     }
+
+    pub fn remove_pole(&mut self, key: PoleKey) {
+        self.poles.remove(key);
+    } 
     
     pub fn add_wire_with_max_flow(&mut self, a: PoleKey, b: PoleKey, max_flow: LoadUnit) -> WireKey {
         if self.wires.values().any(|wire| (wire.a == a && wire.b == b) || (wire.b == a && wire.a == b)) {
@@ -599,6 +618,10 @@ impl Game {
 
     pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
         self.add_wire_with_max_flow(a, b, LoadUnit::MAX)
+    }
+
+    pub fn remove_wire(&mut self, wire: WireKey) {
+        self.wires.remove(wire);
     }
 
     pub fn add_wire_chain(&mut self, poles: &[PoleKey]) -> Vec<WireKey> {

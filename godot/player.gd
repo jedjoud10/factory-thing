@@ -56,12 +56,24 @@ func _process(delta: float) -> void:
 
 enum ActorType {
 	Machine,
-	PowerPole
+	PowerPole,
+	Wire,
 }
 
 
 var selected_actor_type: ActorType = ActorType.Machine
 
+var fst_selected_actor: Node3D = null
+var snd_selected_actor: Node3D = null
+
+func get_looking_at_actor() -> Node3D:
+	if (raycaster.get_collider() != null):
+		var parent = raycaster.get_collider().get_parent()
+		if (parent.is_in_group("actors")):
+			print("select actor ", parent)
+			return parent
+	return null
+	
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -70,14 +82,30 @@ func _input(event):
 	elif event.is_action_pressed("remove_actor"):
 		remove_actor()
 	elif event.is_action_pressed("select_machine_as_actor"):
+		print("select machine as actor")
 		selected_actor_type = ActorType.Machine
 	elif event.is_action_pressed("select_pole_as_actor"):
+		print("select pole as actor")
 		selected_actor_type = ActorType.PowerPole	
+	elif event.is_action_pressed("select_wire_as_actor"):
+		print("select wire as actor")
+		fst_selected_actor = null
+		snd_selected_actor = null
+		selected_actor_type = ActorType.Wire	
+	elif event.is_action_pressed("select_actor"):
+		if (fst_selected_actor == null):
+			fst_selected_actor = get_looking_at_actor()
+			print("selected first actor")
+		else:
+			snd_selected_actor = get_looking_at_actor()
+			print("selected second actor")
 	elif event is InputEventMouseMotion:
 		accumulated_mouse += event.relative * sens
 		
 var machine_scene = preload("res://machine.tscn")
-var power_pole_scene = preload("res://power_pole.tscn")
+var power_pole_scene = preload("res://pole.tscn")
+var wire_scene = preload("res://wire.tscn")
+
 
 		
 func place_actor() -> void:
@@ -88,9 +116,41 @@ func place_actor() -> void:
 			instance = machine_scene.instantiate()
 		ActorType.PowerPole:
 			instance = power_pole_scene.instantiate()
+		ActorType.Wire:
+			if (fst_selected_actor == null || snd_selected_actor == null):
+				print("need to select two actors to wire up")
+				return
+			instance = wire_scene.instantiate()
 	
 	var node = instance as Node3D
 	node.position += raycaster.get_collision_point() + Vector3(0, 0.5, 0)
+	
+	match selected_actor_type:
+		ActorType.Wire:
+			var node_p1 = (fst_selected_actor as Node3D).position
+			var node_p2 = (snd_selected_actor as Node3D).position
+			var d = node_p1.distance_to(node_p2)
+			var pos = (node_p1 + node_p2) * 0.5
+			node.position = pos
+			node.look_at_from_position(pos, node_p1)
+			
+			var col_shape = node.get_node("StaticBody3D/CollisionShape3D") as CollisionShape3D
+			col_shape.shape = col_shape.shape.duplicate()
+			(col_shape.shape as BoxShape3D).size.z = d
+			
+			var mesh = node.get_node("MeshInstance3D") as Node3D 
+			mesh.scale.y = d * 0.5
+			
+			var wire = node as WireNode
+			wire.pole_1_ref = fst_selected_actor as PoleNode
+			wire.pole_2_ref = snd_selected_actor as PoleNode
+			
+			
+			fst_selected_actor = null
+			snd_selected_actor = null
+		_:
+			pass
+	
 	get_tree().root.get_child(0).add_child(instance)
 	
 func remove_actor() -> void: 

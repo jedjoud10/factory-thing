@@ -41,6 +41,20 @@ fog_enabled = true
 
 [sub_resource type="BoxMesh" id="BoxMesh_gyfs4"]
 
+[sub_resource type="GDScript" id="GDScript_2c62f"]
+script/source = "extends Node3D
+
+#func _ready() -> void:
+#	var factory_manager = get_tree().root.get_child(0).get_node(\"FactoryManager\")
+#	var pole = get_node(\"Power Pole\")
+#	factory_manager.spawn_machine(self, pole)
+
+#func _exit_tree() -> void:
+#	var factory_manager = get_tree().root.get_child(0).get_node(\"FactoryManager\")
+#	var pole = get_node(\"Power Pole\")
+#	factory_manager.despawn_machine(self, pole)
+"
+
 [node name="Main" type="Node3D" unique_id=782682801]
 
 [node name="Player" type="CharacterBody3D" parent="." unique_id=715877920]
@@ -89,5 +103,6 @@ mesh = SubResource("BoxMesh_gyfs4")
 
 [node name="Machine" parent="." unique_id=2009689961 instance=ExtResource("2_2c62f")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.00347, 0.9999999, 3.143793)
+script = SubResource("GDScript_2c62f")
 
 [node name="FactoryManager" type="FactoryManager" parent="." unique_id=1425192706]
