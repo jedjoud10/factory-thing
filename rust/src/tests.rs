@@ -259,6 +259,68 @@ mod power_tests {
             assert_eq!(game.wires[*wire_key].flow, 10);
         }
     }
+
+    #[test]
+    fn no_power_machine_no_items() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let (_, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        
+        let wire = game.add_wire(a,b);
+        
+        game.tick();
+        assert_no_power(game, a, b, wire);
+    }
+
+    #[test]
+    fn no_power_machine_halt_reason_output_full() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let (m, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        
+        *game.get_input_hatch_mut(m, 0) = Item::full_stack(RAW_IRON_1);
+        *game.get_output_hatch_mut(m, 0) = Item::full_stack(CRUSHED_IRON);
+
+
+        let wire = game.add_wire(a,b);
+        
+        game.tick();
+        assert_no_power(game, a, b, wire);
+    }
+
+    #[test]
+    fn no_power_machine_halt_reason_output_type_mismatch() {
+        let mut game = Game::default();
+        let a = game.add_generator(10);
+        let (m, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        
+        *game.get_input_hatch_mut(m, 0) = Item::full_stack(RAW_IRON_1);
+        *game.get_output_hatch_mut(m, 0) = Item::one(RAW_IRON_1);
+
+
+        let wire = game.add_wire(a,b);
+        
+        game.tick();
+        assert_no_power(game, a, b, wire);
+    }
+
+    fn assert_no_power(game: Game, a: PoleKey, b: PoleKey, wire: WireKey) {
+        assert!(matches!(
+            game.poles[a],
+            Pole::Generator {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(matches!(
+            game.poles[b],
+            Pole::Consumer {
+                current_load: 0,
+                ..
+            }
+        ));
+        assert!(game.wires[wire].flow == 0);
+            }
 }
 
 /*

@@ -7,7 +7,7 @@ extends CharacterBody3D
 
 @onready var camera = $"Camera3D"
 @onready var raycaster = $"Camera3D/RayCast3D"
-
+@onready var indicator = $"Select Indicator"
 
 
 var accumulated_mouse = Vector2.ZERO
@@ -51,6 +51,14 @@ func _process(delta: float) -> void:
 	
 	# TODO: there's still jittery rotation happening here, probably because of player rotation interpolation
 	rotation = Vector3(0, y, 0)
+	
+	
+	# moves the select indicator to where the raycast hit (if it did hit)
+	if (raycaster.get_collider() == null):
+		indicator.hide()
+	else:
+		indicator.show()
+		indicator.global_position = raycaster.get_collision_point()
 	
 	pass
 
@@ -117,21 +125,21 @@ func place_actor() -> void:
 		ActorType.PowerPole:
 			instance = power_pole_scene.instantiate()
 		ActorType.Wire:
-			if (fst_selected_actor == null || snd_selected_actor == null):
-				print("need to select two actors to wire up")
+			if ((fst_selected_actor as PoleNode) == null || (snd_selected_actor as PoleNode) == null):
+				print("need to select two poles to wire up")
 				return
 			instance = wire_scene.instantiate()
 	
 	var node = instance as Node3D
-	node.position += raycaster.get_collision_point() + Vector3(0, 0.5, 0)
+	var position = Vector3.ZERO
 	
 	match selected_actor_type:
 		ActorType.Wire:
-			var node_p1 = (fst_selected_actor as Node3D).position
-			var node_p2 = (snd_selected_actor as Node3D).position
+			var node_p1 = (fst_selected_actor as Node3D).global_position
+			var node_p2 = (snd_selected_actor as Node3D).global_position
 			var d = node_p1.distance_to(node_p2)
 			var pos = (node_p1 + node_p2) * 0.5
-			node.position = pos
+			position = pos
 			node.look_at_from_position(pos, node_p1)
 			
 			var col_shape = node.get_node("StaticBody3D/CollisionShape3D") as CollisionShape3D
@@ -149,9 +157,11 @@ func place_actor() -> void:
 			fst_selected_actor = null
 			snd_selected_actor = null
 		_:
-			pass
+			position = raycaster.get_collision_point() + Vector3(0, 0.5, 0)
 	
 	get_tree().root.get_child(0).add_child(instance)
+	node.global_position = position
+	
 	
 func remove_actor() -> void: 
 	var collider = raycaster.get_collider()
@@ -161,4 +171,10 @@ func remove_actor() -> void:
 	
 	var parent = collider.get_parent();
 	if (parent.is_in_group("actors")):
-		parent.queue_free()
+		# check if pole is owned by machine (and, in which case, we cannot destroy it)
+		var pole = parent as PoleNode
+		if (pole != null):
+			if (!pole.owned):
+				parent.queue_free()
+		else:
+			parent.queue_free()

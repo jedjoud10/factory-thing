@@ -181,6 +181,13 @@ pub struct Game {
     pub wires: SlotMap<WireKey, Wire>,
 }
 
+#[derive(PartialEq, Eq)]
+enum ResetProgressReason {
+    NoPower,
+    FinishedRecipe,
+    NoProgress,
+}
+
 impl Game {
     pub fn tick(&mut self) {
         let machines = &mut self.machines;
@@ -342,97 +349,17 @@ impl Game {
         }
 
         for machine in machines.values_mut() {
-            let reset_progress = if let Some(progress) = machine.progress.as_mut() {
-                let satisfied_and_target_load =
-                    machine.pole.map(|pole_id| match self.poles[pole_id] {
-                        Pole::Consumer {
-                            target_load,
-                            current_load,
-                        } => (current_load, target_load),
-                        _ => unreachable!(),
-                    });
+            let satisfied_and_target_load = machine.pole.map(|pole_id| match self.poles[pole_id] {
+                Pole::Consumer {
+                    target_load,
+                    current_load,
+                } => (current_load, target_load),
+                _ => unreachable!(),
+            });
 
-                if let Some((satisfied, target)) = satisfied_and_target_load {
-                    if satisfied == 0 {
-                        // "infinite" slow down ticks for machines that are not powered at all
-                        progress.slow_down_ticks_remaining = NonZeroU16::new(u16::MAX);
-                        machine.status = MachineStatus::NonPowered;
-                    } else if satisfied < target {
-                        machine.status = MachineStatus::Underpowered;
+            let opt_reset_progress = Self::do_progress(machine, satisfied_and_target_load);
 
-                        // can only update once this has been reset (in case fluctuating power)
-                        if progress.slow_down_ticks_remaining.is_none() {
-                            // calculate efficiency percentage
-                            let percent = satisfied as f32 / target as f32;
-
-                            // 100% result in 1 ticks (which will get reset immediately after it gets set)
-                            // 50% result in 2 ticks
-                            // 25% result in 4 ticks
-                            let inv = (1.0f32 / percent) as u16;
-                            progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
-                        }
-                    }
-                } else {
-                    // no slow down ticks for machines without poles
-                    progress.slow_down_ticks_remaining = None;
-                }
-                
-                // prioritize slow down ticks first
-                let progress_normally = if let Some(slow_down_ticks) = progress.slow_down_ticks_remaining {
-                    // special case: non powered machines 
-                    if slow_down_ticks.get() == u16::MAX {
-                        false
-                    } else {
-                        // if the decremented slow_down_ticks_remaning is zero, then it will result in None (which works in our favour)
-                        progress.slow_down_ticks_remaining = NonZeroU16::new(slow_down_ticks.get() - 1);
-
-                        // when this is none, then we have progressed through all slowdown ticks
-                        progress.slow_down_ticks_remaining.is_none()
-                    }
-                } else {
-                    true
-                };
-
-                if progress_normally {
-                    // machine is currently progressing through the recipe, take one tick off
-                    // TODO: add pause / stop / resume functionality here
-                    let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
-
-                    if let Some(non_zero) = non_zero {
-                        // number of ticks is non-zero, update, and continue
-                        progress.ticks_remaining = non_zero;
-                        false
-                    } else {
-                        // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
-                        // `unwrap` here is safe because the `recipe: Option<&'static Recipe>` should not be set to `None` when a machine is progressing
-                        let recipe = &machine.recipe.unwrap();
-
-                        // take items from input hatches
-                        for (recipe_input, hatch_input) in
-                            recipe.input.iter().zip(machine.input.iter_mut())
-                        {
-                            hatch_input.buffer.take(recipe_input);
-                        }
-
-                        // put items in output hatches
-                        for (recipe_output, hatch_output) in
-                            recipe.output.iter().zip(machine.output.iter_mut())
-                        {
-                            hatch_output.buffer.accumulate(recipe_output);
-                        }
-
-                        // reset machine progress
-                        machine.progress.take().unwrap();
-                        true
-                    }
-                } else {
-                    false
-                }
-            } else {
-                true
-            };
-
-            if reset_progress {
+            if let Some(reset_progress_reason) = opt_reset_progress {
                 // reset consumption pole
                 if let Some(consumer_pole_id) = machine.pole {
                     self.poles[consumer_pole_id] = Pole::Consumer {
@@ -441,7 +368,12 @@ impl Game {
                     };
                 }
 
-                machine.status = MachineStatus::None;
+                // we must make sure to keep status otherwise it will get reset to "None" even though the reason was "NoPower"
+                if reset_progress_reason == ResetProgressReason::NoPower {
+                    machine.status = MachineStatus::NonPowered;
+                } else {
+                    machine.status = MachineStatus::None;
+                }
 
                 if let Some(recipe) = machine.recipe {
                     assert_eq!(recipe.input.len(), machine.input.len());
@@ -474,11 +406,18 @@ impl Game {
 
                     // if requirements are met, then we can begin machine progress
                     if inputs_match_recipe_input && outputs_match_recipe_output {
-                        let _ = machine.progress.insert(Progress {
-                            ticks_remaining: NonZeroU16::new(recipe.ticks)
-                                .expect("recipe ticks must not be zero"),
-                            slow_down_ticks_remaining: None,
-                        });
+                        // resume the progress previously (can only happen if we lose power in the middle of a recipe)
+                        if let Some(previous_progress) = machine.progress.take() {
+                            // godot::global::godot_print!("progress already existed");
+                            machine.progress = Some(previous_progress);
+                        } else {
+                            // godot::global::godot_print!("new progress");
+                            let _ = machine.progress.insert(Progress {
+                                ticks_remaining: NonZeroU16::new(recipe.ticks)
+                                    .expect("recipe ticks must not be zero"),
+                                slow_down_ticks_remaining: None,
+                            });
+                        }
 
                         // set the machine's consumer pole to enabled state
                         if let Some(consumer_pole_id) = machine.pole {
@@ -549,6 +488,96 @@ impl Game {
             }
         }
     }
+
+    fn do_progress(machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
+        //godot::global::godot_print!("{:?}", satisfied_and_target_load);
+        let reset_progress = if let Some(progress) = machine.progress.as_mut() {
+            if let Some((satisfied, target)) = satisfied_and_target_load {
+                if satisfied == 0 {
+                    // "infinite" slow down ticks for machines that are not powered at all
+                    progress.slow_down_ticks_remaining = NonZeroU16::new(u16::MAX);
+                    machine.status = MachineStatus::NonPowered;
+                } else if satisfied < target {
+                    machine.status = MachineStatus::Underpowered;
+    
+                    // can only update once this has been reset (in case fluctuating power)
+                    if progress.slow_down_ticks_remaining.is_none() {
+                        // calculate efficiency percentage
+                        let percent = satisfied as f32 / target as f32;
+    
+                        // 100% result in 1 ticks (which will get reset immediately after it gets set)
+                        // 50% result in 2 ticks
+                        // 25% result in 4 ticks
+                        let inv = (1.0f32 / percent) as u16;
+                        progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
+                    }
+                } else {
+                    // no slow down for fully powered shii
+                    progress.slow_down_ticks_remaining = None;
+                }
+            } else {
+                // no slow down ticks for machines without poles
+                progress.slow_down_ticks_remaining = None;
+            }
+    
+            // prioritize slow down ticks first
+            let progress_normally = if let Some(slow_down_ticks) = progress.slow_down_ticks_remaining {
+                // special case: non powered machines 
+                if slow_down_ticks.get() == u16::MAX {
+                    // we must RESET progress
+                    return Some(ResetProgressReason::NoPower);
+                } else {
+                    // if the decremented slow_down_ticks_remaning is zero, then it will result in None (which works in our favour)
+                    progress.slow_down_ticks_remaining = NonZeroU16::new(slow_down_ticks.get() - 1);
+    
+                    // when this is none, then we have progressed through all slowdown ticks
+                    progress.slow_down_ticks_remaining.is_none()
+                }
+            } else {
+                true
+            };
+    
+            if progress_normally {
+                // machine is currently progressing through the recipe, take one tick off
+                // TODO: add pause / stop / resume functionality here
+                let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
+    
+                if let Some(non_zero) = non_zero {
+                    // number of ticks is non-zero, update, and continue
+                    progress.ticks_remaining = non_zero;
+                    None
+                } else {
+                    // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
+                    // `unwrap` here is safe because the `recipe: Option<&'static Recipe>` should not be set to `None` when a machine is progressing
+                    let recipe = &machine.recipe.unwrap();
+    
+                    // take items from input hatches
+                    for (recipe_input, hatch_input) in
+                        recipe.input.iter().zip(machine.input.iter_mut())
+                    {
+                        hatch_input.buffer.take(recipe_input);
+                    }
+    
+                    // put items in output hatches
+                    for (recipe_output, hatch_output) in
+                        recipe.output.iter().zip(machine.output.iter_mut())
+                    {
+                        hatch_output.buffer.accumulate(recipe_output);
+                    }
+    
+                    // reset machine progress
+                    machine.progress.take().unwrap();
+                    Some(ResetProgressReason::FinishedRecipe)
+                }
+            } else {
+                None
+            }
+        } else {
+            Some(ResetProgressReason::NoProgress)
+        };
+        
+        reset_progress
+    }
 }
 
 impl Game {
@@ -582,11 +611,20 @@ impl Game {
         let machine_id = self.machines.insert(machine);
         (machine_id, pole_id)
     }
+
+    pub fn remove_machine(&mut self, key: MachineKey) {
+        self.machines.remove(key);
+    }
+
+    // not really adding...
+    pub fn add_generator_with_pole(&mut self, max_load: LoadUnit, pole_key: PoleKey) {
+        self.poles[pole_key] = Pole::Generator { max_load, current_load: 0 }
+    }
     
     pub fn add_infinite_generator(&mut self) -> PoleKey {
         self.add_generator(LoadUnit::MAX)
     }
-    
+
     pub fn add_generator(&mut self, max_load: LoadUnit) -> PoleKey {
         self.poles.insert(Pole::Generator { max_load, current_load: 0 })
     }
@@ -601,6 +639,9 @@ impl Game {
 
     pub fn remove_pole(&mut self, key: PoleKey) {
         self.poles.remove(key);
+
+        // remove associated wires
+        self.wires.retain(|_, w| !(w.a == key || w.b == key));
     } 
     
     pub fn add_wire_with_max_flow(&mut self, a: PoleKey, b: PoleKey, max_flow: LoadUnit) -> WireKey {
@@ -640,6 +681,10 @@ impl Game {
     
     pub fn get_input_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
         &mut self.machines[machine_id].input[hatch_index].buffer
+    }
+
+    pub fn get_output_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
+        &mut self.machines[machine_id].output[hatch_index].buffer
     }
 }
 
