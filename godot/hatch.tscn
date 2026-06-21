@@ -4,9 +4,17 @@
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ybbri"]
 
-[node name="Hatch" type="Node3D" unique_id=276232919]
+[sub_resource type="BoxShape3D" id="BoxShape3D_ybbri"]
+size = Vector3(1, 1, 0.1)
+
+[node name="Hatch" type="HatchNode" unique_id=524876700 groups=["actors"]]
 script = ExtResource("1_ybbri")
 
 [node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=345589870]
 size = Vector3(1, 1, 0.1)
 material = SubResource("StandardMaterial3D_ybbri")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=597851549]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=256745206]
+shape = SubResource("BoxShape3D_ybbri")

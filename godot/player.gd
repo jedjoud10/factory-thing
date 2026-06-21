@@ -66,6 +66,7 @@ enum ActorType {
 	Machine,
 	PowerPole,
 	Wire,
+	Belt
 }
 
 
@@ -100,6 +101,11 @@ func _input(event):
 		fst_selected_actor = null
 		snd_selected_actor = null
 		selected_actor_type = ActorType.Wire	
+	elif event.is_action_pressed("select_belt_as_actor"):
+		print("select belt as actor")
+		fst_selected_actor = null
+		snd_selected_actor = null
+		selected_actor_type = ActorType.Belt	
 	elif event.is_action_pressed("select_actor"):
 		if (fst_selected_actor == null):
 			fst_selected_actor = get_looking_at_actor()
@@ -113,6 +119,7 @@ func _input(event):
 var machine_scene = preload("res://machine.tscn")
 var power_pole_scene = preload("res://pole.tscn")
 var wire_scene = preload("res://wire.tscn")
+var belt_scene = preload("res://belt.tscn")
 
 
 		
@@ -129,6 +136,11 @@ func place_actor() -> void:
 				print("need to select two poles to wire up")
 				return
 			instance = wire_scene.instantiate()
+		ActorType.Belt:
+			if ((fst_selected_actor as HatchNode) == null || (snd_selected_actor as HatchNode) == null):
+				print("need to select two hatches to belt up")
+				return
+			instance = belt_scene.instantiate()
 	
 	var node = instance as Node3D
 	var position = Vector3.ZERO
@@ -156,6 +168,29 @@ func place_actor() -> void:
 			
 			fst_selected_actor = null
 			snd_selected_actor = null
+		ActorType.Belt:
+			var node_p1 = (fst_selected_actor as Node3D).global_position
+			var node_p2 = (snd_selected_actor as Node3D).global_position
+			var d = node_p1.distance_to(node_p2)
+			var pos = (node_p1 + node_p2) * 0.5
+			position = pos
+			node.look_at_from_position(pos, node_p1)
+			
+			var col_shape = node.get_node("StaticBody3D/CollisionShape3D") as CollisionShape3D
+			col_shape.shape = col_shape.shape.duplicate()
+			(col_shape.shape as BoxShape3D).size.z = d
+			
+			var mesh = node.get_node("Belt Visual") as Node3D 
+			mesh.scale.z = d * 0.5
+			
+			var belt = node as BeltNode
+			belt.belt_start_hatch_ref = fst_selected_actor as HatchNode
+			belt.belt_end_hatch_ref = snd_selected_actor as HatchNode
+			belt.length = d as int
+			
+			
+			fst_selected_actor = null
+			snd_selected_actor = null
 		_:
 			position = raycaster.get_collision_point() + Vector3(0, 0.5, 0)
 	
@@ -171,7 +206,11 @@ func remove_actor() -> void:
 	
 	var parent = collider.get_parent();
 	if (parent.is_in_group("actors")):
-		# check if pole is owned by machine (and, in which case, we cannot destroy it)
+		# check if actor is hatch (cannot destroy)
+		if (parent is HatchNode):
+			return
+		
+		# check if actor is pole and is owned by machine (and, in which case, we cannot destroy it)
 		var pole = parent as PoleNode
 		if (pole != null):
 			if (!pole.owned):

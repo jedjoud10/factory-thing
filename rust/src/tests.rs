@@ -320,7 +320,7 @@ mod power_tests {
             }
         ));
         assert!(game.wires[wire].flow == 0);
-            }
+    }
 }
 
 /*

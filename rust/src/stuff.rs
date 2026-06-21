@@ -436,6 +436,8 @@ impl Game {
                         }
                     }
                 }
+            } else {
+                //machine.status = MachineStatus::None
             }
         }
 
@@ -490,7 +492,7 @@ impl Game {
     }
 
     fn do_progress(machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
-        //godot::global::godot_print!("{:?}", satisfied_and_target_load);
+        // godot::global::godot_print!("{:?}", satisfied_and_target_load);
         let reset_progress = if let Some(progress) = machine.progress.as_mut() {
             if let Some((satisfied, target)) = satisfied_and_target_load {
                 if satisfied == 0 {
@@ -498,16 +500,18 @@ impl Game {
                     progress.slow_down_ticks_remaining = NonZeroU16::new(u16::MAX);
                     machine.status = MachineStatus::NonPowered;
                 } else if satisfied < target {
+                    // godot::global::godot_print!("underpowered");
                     machine.status = MachineStatus::Underpowered;
     
-                    // can only update once this has been reset (in case fluctuating power)
-                    if progress.slow_down_ticks_remaining.is_none() {
+                    // can only update once this has been reset (in case fluctuating power) OR if it was previously set to specific value
+                    if progress.slow_down_ticks_remaining.is_none() || progress.slow_down_ticks_remaining == Some(NonZeroU16::new(u16::MAX).unwrap())  {
                         // calculate efficiency percentage
                         let percent = satisfied as f32 / target as f32;
     
                         // 100% result in 1 ticks (which will get reset immediately after it gets set)
                         // 50% result in 2 ticks
                         // 25% result in 4 ticks
+                        // TODO: replace this, as we cannot represent efficiencies >50% but <100% in slow down ticks
                         let inv = (1.0f32 / percent) as u16;
                         progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
                     }
@@ -678,6 +682,19 @@ impl Game {
             buffer: vec![Item::invalid(); 8],
         })
     }
+
+    pub fn add_belt_2(&mut self, output_hatch: HatchReference, input_hatch: HatchReference, buffer_length: usize) -> BeltKey {
+        self.belts.insert(Belt {
+            belt_start: output_hatch,
+            belt_end: input_hatch,
+            buffer: vec![Item::invalid(); buffer_length.max(2)],
+        })
+    }
+
+    pub fn remove_belt(&mut self, belt: BeltKey) {
+        self.belts.remove(belt);
+    }
+    
     
     pub fn get_input_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
         &mut self.machines[machine_id].input[hatch_index].buffer

@@ -158,6 +158,103 @@ impl INode3D for MachineNode {
     }
 }
 
+
+#[derive(GodotClass)]
+#[class(base=Node3D)]
+struct HatchNode {
+    base: Base<Node3D>,
+
+    #[export]
+    hatch_index: u32,
+    
+    #[export]
+    input_hatch: bool,
+}
+
+#[godot_api]
+impl INode3D for HatchNode {
+    fn init(base: Base<Node3D>) -> Self {
+        Self {
+            base,
+            input_hatch: false,
+            hatch_index: 0,
+        }
+    }
+}
+
+#[derive(GodotClass)]
+#[class(base=Node3D)]
+struct BeltNode {
+    base: Base<Node3D>,
+
+    #[var]
+    belt_start_hatch_ref: Option<Gd<HatchNode>>,
+    #[var]
+    belt_end_hatch_ref: Option<Gd<HatchNode>>,
+    #[var]
+    length: i64,
+
+    items: Vec<Option<Gd<Node3D>>>,
+    
+    key: BeltKey,
+}
+
+#[godot_api]
+impl INode3D for BeltNode {
+    fn init(base: Base<Node3D>) -> Self {
+        Self {
+            base,
+            belt_start_hatch_ref: None,
+            belt_end_hatch_ref: None,
+            length: 0,
+            items: Vec::new(),
+            key: BeltKey::null()
+        }
+    }
+
+    fn ready(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        let mut start_hatch = self.belt_start_hatch_ref.clone().unwrap();
+        let start_hatch_machine = start_hatch.get_parent().unwrap().cast::<MachineNode>().bind().key;
+        let start_hatch = start_hatch.bind_mut();
+
+
+        let mut end_hatch = self.belt_end_hatch_ref.clone().unwrap();
+        let end_hatch_machine = end_hatch.get_parent().unwrap().cast::<MachineNode>().bind().key;
+        let end_hatch = end_hatch.bind_mut();
+
+        let a = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
+        let b = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
+        self.key = bound.game.add_belt_2(a, b, self.length as usize);
+    }
+
+    fn process(&mut self, delta: f32) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+    }
+
+    fn exit_tree(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        bound.game.remove_belt(self.key);
+    }
+}
+
+
+
+
 #[derive(GodotClass)]
 #[class(base=Node3D)]
 struct GeneratorNode {
