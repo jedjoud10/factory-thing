@@ -442,6 +442,7 @@ impl Game {
         }
 
         for belt in belts.values_mut() {
+            godot::global::godot_print!("belt hello");
             let Belt {
                 belt_start:
                     HatchReference {
@@ -474,7 +475,10 @@ impl Game {
             // transfer last element in belt buffer to input hatch
             // roll elements in belt buffer one to the right
             // transfer output hatch item to first element in belt buffer
-            if belt_free_output {
+            // TODO: unfuck this entire thing. this is wrong. on so many levels
+            if true {
+                
+                godot::global::godot_print!("belt shifting");
                 // element at index buffer.len()-1 is belt output
                 let input_hatch = &mut machines[end].input[end_hatch_index];
                 input_hatch.buffer = *buffer.last().unwrap();

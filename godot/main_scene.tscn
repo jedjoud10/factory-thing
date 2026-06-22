@@ -41,7 +41,6 @@ sky_material = SubResource("ProceduralSkyMaterial_o3jxj")
 background_mode = 2
 sky = SubResource("Sky_0f027")
 tonemap_mode = 2
-fog_enabled = true
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_2c62f"]
 

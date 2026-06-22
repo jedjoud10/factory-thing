@@ -29,6 +29,7 @@ text = "Machine"
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.69810146, -0.80794793)
 
 [node name="Input Hatch" parent="." unique_id=276232919 instance=ExtResource("2_q015e")]
+input_hatch = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.1571972)
 
 [node name="Output Hatch" parent="." unique_id=1583920681 instance=ExtResource("2_q015e")]

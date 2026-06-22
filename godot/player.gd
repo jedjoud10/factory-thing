@@ -147,8 +147,8 @@ func place_actor() -> void:
 	
 	match selected_actor_type:
 		ActorType.Wire:
-			var node_p1 = (fst_selected_actor as Node3D).global_position
-			var node_p2 = (snd_selected_actor as Node3D).global_position
+			var node_p1 = (fst_selected_actor.get_node("Connector") as Node3D).global_position
+			var node_p2 = (snd_selected_actor.get_node("Connector") as Node3D).global_position
 			var d = node_p1.distance_to(node_p2)
 			var pos = (node_p1 + node_p2) * 0.5
 			position = pos
@@ -186,6 +186,8 @@ func place_actor() -> void:
 			var belt = node as BeltNode
 			belt.belt_start_hatch_ref = fst_selected_actor as HatchNode
 			belt.belt_end_hatch_ref = snd_selected_actor as HatchNode
+			belt.start_position = fst_selected_actor.global_position
+			belt.end_position = snd_selected_actor.global_position
 			belt.length = d as int
 			
 			

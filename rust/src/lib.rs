@@ -128,7 +128,7 @@ impl INode3D for MachineNode {
         
         self.key = bound.game.add_machine_with_pole(&CRUSH_IRON_RECIPE, pole.key);
 
-        bound.game.machines[self.key].input[0].buffer = Item::full_stack(RAW_IRON_1);
+        bound.game.machines[self.key].input[0].buffer = Item { id: RAW_IRON_1, count: 8 };
     }
 
     fn process(&mut self, delta: f64) {
@@ -194,6 +194,11 @@ struct BeltNode {
     #[var]
     length: i64,
 
+    #[var]
+    start_position: Vector3,
+    #[var]
+    end_position: Vector3,
+
     items: Vec<Option<Gd<Node3D>>>,
     
     key: BeltKey,
@@ -206,6 +211,8 @@ impl INode3D for BeltNode {
             base,
             belt_start_hatch_ref: None,
             belt_end_hatch_ref: None,
+            start_position: Vector3::ZERO,
+            end_position: Vector3::ZERO,
             length: 0,
             items: Vec::new(),
             key: BeltKey::null()
@@ -228,17 +235,43 @@ impl INode3D for BeltNode {
         let end_hatch_machine = end_hatch.get_parent().unwrap().cast::<MachineNode>().bind().key;
         let end_hatch = end_hatch.bind_mut();
 
-        let a = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
-        let b = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
-        self.key = bound.game.add_belt_2(a, b, self.length as usize);
+        let output_hatch = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
+        let input_hatch = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
+        self.key = bound.game.add_belt_2(output_hatch, input_hatch, self.length as usize * 30);
     }
 
     fn process(&mut self, delta: f32) {
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
+        let mut root = window.get_child(0).unwrap();
         let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
         let mut bound = factory_manager.bind_mut();
+
+        let belt = &bound.game.belts[self.key];
+    
+        for x in self.items.drain(..) {
+            x.unwrap().free();
+        }
+
+        let scene = load::<PackedScene>("res://item.tscn");
+        let a = self.start_position;
+        let b = self.end_position;
+
+        for (i, elem) in belt.buffer.iter().enumerate() {
+            let factor = i as f32 / (belt.buffer.len() as f32 - 1f32);
+            
+            if !elem.is_invalid() {
+                godot::global::godot_print!("spawn shi");
+                let instance = scene.instantiate().unwrap();
+                root.add_child(&instance);
+                
+                let mut instance = instance.cast::<Node3D>();
+                let lerped = Vector3::lerp(a, b, factor);
+                
+                instance.set_global_position(lerped);
+                self.items.push(Some(instance));
+            }
+        }
     }
 
     fn exit_tree(&mut self) {

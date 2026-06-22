@@ -25,3 +25,6 @@ height = 0.548
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.30168128, 0)
 radius = 0.10297729
 material = SubResource("StandardMaterial3D_7048l")
+
+[node name="Connector" type="Node3D" parent="." unique_id=510525889]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
