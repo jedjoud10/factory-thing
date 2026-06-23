@@ -26,7 +26,7 @@ unsafe impl ExtensionLibrary for MyExtension {}
 #[class(base=Node3D)]
 struct FactoryManager {
     base: Base<Node3D>,
-
+    real_time: f32,
     game: Game,
 }
 
@@ -36,11 +36,16 @@ impl INode3D for FactoryManager {
     fn init(base: Base<Node3D>) -> Self {
         Self {
             base,
+            real_time: 0f32,
             game: Default::default(),
         }
     }
 
-    fn physics_process(&mut self, delta: f64) {
+    fn process(&mut self, delta: f32) {
+        self.real_time += delta;
+    }
+
+    fn physics_process(&mut self, delta: f32) {
         // TODO: move to custom loop
         self.game.tick();
     }
@@ -129,9 +134,15 @@ impl INode3D for MachineNode {
         self.key = bound.game.add_machine_with_pole(&CRUSH_IRON_RECIPE, pole.key);
 
         bound.game.machines[self.key].input[0].buffer = Item { id: RAW_IRON_1, count: 8 };
+
+        for child in self.base().get_children().iter_shared() {
+            if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
+                hatch_node.bind_mut().owning_machine_key = self.key;
+            }
+        }
     }
 
-    fn process(&mut self, delta: f64) {
+    fn process(&mut self, _delta: f32) {
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
@@ -143,7 +154,7 @@ impl INode3D for MachineNode {
         let progress = &bound.game.machines[self.key].progress;
         let output_hatch = &bound.game.machines[self.key].output[0].buffer;
         
-        label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
+        //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
         //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
     }
 
@@ -169,6 +180,8 @@ struct HatchNode {
     
     #[export]
     input_hatch: bool,
+
+    owning_machine_key: MachineKey,
 }
 
 #[godot_api]
@@ -178,7 +191,28 @@ impl INode3D for HatchNode {
             base,
             input_hatch: false,
             hatch_index: 0,
+            owning_machine_key: MachineKey::null(),
         }
+    }
+
+    
+    fn process(&mut self, _delta: f32) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+
+        let mut label = self.base().get_node_as::<Label3D>("Label3D");
+        let machine = &bound.game.machines[self.owning_machine_key];
+        
+        let item: Item = if self.input_hatch {
+            machine.input[self.hatch_index as usize].buffer
+        } else {
+            machine.output[self.hatch_index as usize].buffer
+        };
+
+        label.set_text(&item.display());
     }
 }
 
@@ -237,33 +271,43 @@ impl INode3D for BeltNode {
 
         let output_hatch = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
         let input_hatch = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
-        self.key = bound.game.add_belt_2(output_hatch, input_hatch, self.length as usize * 30);
+        self.key = bound.game.add_belt_2(output_hatch, input_hatch, self.length as usize);
     }
 
-    fn process(&mut self, delta: f32) {
+    fn process(&mut self, _delta: f32) {
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
-        let mut root = window.get_child(0).unwrap();
-        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let mut bound = factory_manager.bind_mut();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
 
+        // https://github.com/JL-squared/Factory-ECS-Prototype/blob/main/Assets/Actors/Systems/VisualSystems.cs#L625
+        let tick_rate = 60;
         let belt = &bound.game.belts[self.key];
-    
-        for x in self.items.drain(..) {
-            x.unwrap().free();
-        }
+        let last_transfer_tick = belt.last_transfer_tick;
+        let last_transfer_time = last_transfer_tick as f32 / tick_rate as f32;
+        let belt_ticks_between_transfers = 16;
+        let tick_interpolation_factor = (bound.real_time - last_transfer_time) * (tick_rate as f32 / belt_ticks_between_transfers as f32);
+        let tick_interpolation_factor = tick_interpolation_factor.clamp(0f32, 1f32);
 
         let scene = load::<PackedScene>("res://item.tscn");
         let a = self.start_position;
         let b = self.end_position;
 
+        // TODO: don't spawn / despawn entities every frame bruh
+        for x in self.items.drain(..) {
+            x.unwrap().free();
+        }
+
         for (i, elem) in belt.buffer.iter().enumerate() {
-            let factor = i as f32 / (belt.buffer.len() as f32 - 1f32);
+            let factor_1 = i as f32 / (belt.buffer.len() as f32);
+            let factor_2 = (i+1) as f32 / (belt.buffer.len() as f32);
+            let factor = f32::lerp(factor_1, factor_2, tick_interpolation_factor);
+            
             
             if !elem.is_invalid() {
-                godot::global::godot_print!("spawn shi");
                 let instance = scene.instantiate().unwrap();
-                root.add_child(&instance);
+                self.base_mut().add_child(&instance);
                 
                 let mut instance = instance.cast::<Node3D>();
                 let lerped = Vector3::lerp(a, b, factor);

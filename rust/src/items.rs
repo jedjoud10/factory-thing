@@ -38,6 +38,47 @@ impl Item {
         *self = Self::invalid();
     }
 
+
+    // `from` can be invalid
+    // `to` can be invalid
+    // this will do the transfer appropriately. modifies both
+    pub fn transfer_limited(src: &mut Item, dst: &mut Item, max_transfer_count: u8) {
+        if src.is_invalid() {
+            return;
+        }
+
+        if dst.is_invalid() {
+            // invalid target, move entire stack
+            *dst = *src; 
+            *src = Item::invalid();
+        } else if dst.id == src.id {
+            // same ID, do transfer but STACK LIMITED
+            let stack_size = REGISTRY[src.id as usize].stack_size;
+
+            // remaining slots in DST that can be filled
+            let remaining_slots = stack_size - dst.count;
+
+            // limited by src count as well
+            let transferred_amount = remaining_slots.min(src.count);
+
+            // limited by transfer count as well
+            let transferred_amount = transferred_amount.min(max_transfer_count);
+        
+            assert!(transferred_amount <= stack_size);
+            assert!(transferred_amount <= src.count);
+            
+
+            dst.count += transferred_amount;
+            src.count -= transferred_amount;
+
+            if src.count == 0 {
+                src.invalidate();
+            }
+        } else {
+            // different ID, don't accumulate
+        }
+    }
+
     pub const fn accumulate(&mut self, other: &Item) {
         assert!(self.is_invalid() || self.id == other.id);
 
@@ -50,6 +91,28 @@ impl Item {
 
         self.id = other.id;
         self.count += other.count;
+    }
+
+    pub const fn can_accumulate_from(&self, other: &Item) -> bool {
+        if other.is_invalid() {
+            return false;
+        }
+
+        if self.is_invalid() {
+            true
+        } else if self.id == other.id && self.count + other.count <= REGISTRY[self.id as usize].stack_size {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn display(&self) -> String {
+        if self.is_invalid() {
+            "Invalid".to_string()
+        } else {
+            format!("\"{}\" ({})", REGISTRY[self.id as usize].name, self.count)
+        }
     }
 
     pub const fn take(&mut self, other: &Item) {

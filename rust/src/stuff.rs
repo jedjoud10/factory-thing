@@ -28,6 +28,7 @@ pub struct Belt {
     pub belt_start: HatchReference,
     pub belt_end: HatchReference,
     pub buffer: Vec<Item>,
+    pub last_transfer_tick: u64,
 }
 
 #[derive(Debug)]
@@ -179,6 +180,7 @@ pub struct Game {
     pub belts: SlotMap<BeltKey, Belt>,
     pub poles: SlotMap<PoleKey, Pole>,
     pub wires: SlotMap<WireKey, Wire>,
+    pub tick: u64,
 }
 
 #[derive(PartialEq, Eq)]
@@ -190,10 +192,13 @@ enum ResetProgressReason {
 
 impl Game {
     pub fn tick(&mut self) {
-        let machines = &mut self.machines;
-        let belts = &mut self.belts;
-        let poles = &mut self.poles;
-        let wires = &mut self.wires;
+        let Self {
+            machines,
+            belts,
+            poles,
+            wires,
+            tick,
+        } = self;
 
         // before we reset wire flow, check for max flow and do damage tick
         for wire in wires.values_mut() {
@@ -442,7 +447,6 @@ impl Game {
         }
 
         for belt in belts.values_mut() {
-            godot::global::godot_print!("belt hello");
             let Belt {
                 belt_start:
                     HatchReference {
@@ -455,44 +459,54 @@ impl Game {
                         hatch_index: end_hatch_index,
                     },
                 ref mut buffer,
+                last_transfer_tick: ref mut last_transfer_ticks,
             } = *belt;
 
-            // belt start
-            let output_hatch = &machines[start].output[start_hatch_index];
+            // don't do anything if belt points to invalid hatches
+            if !machines.contains_key(start) || !machines.contains_key(end) {
+                continue;
+            }
 
-            // belt end
-            let input_hatch = &machines[end].input[end_hatch_index];
-
-            // let belt_has_input = !output_hatch.buffer.is_invalid();
-            let belt_free_output = input_hatch.buffer.is_invalid()
-                || input_hatch.buffer.id
-                    == buffer
-                        .last()
-                        .map(|x| x.id)
-                        .unwrap_or(output_hatch.buffer.id);
-
-            // order of operations:
-            // transfer last element in belt buffer to input hatch
-            // roll elements in belt buffer one to the right
-            // transfer output hatch item to first element in belt buffer
-            // TODO: unfuck this entire thing. this is wrong. on so many levels
-            if true {
+            // impossible that it overflows because self.tick > last_transfer_ticks, always
+            if (*tick - *last_transfer_ticks) >= 16 {
+                // godot::global::godot_print!("belt tick");
                 
-                godot::global::godot_print!("belt shifting");
-                // element at index buffer.len()-1 is belt output
-                let input_hatch = &mut machines[end].input[end_hatch_index];
-                input_hatch.buffer = *buffer.last().unwrap();
-                *buffer.last_mut().unwrap() = Item::invalid();
+                // belt start
+                let output_hatch = &machines[start].output[start_hatch_index];
 
-                buffer.rotate_right(1);
+                // belt end
+                let input_hatch = &machines[end].input[end_hatch_index];
 
-                // element at index 0 is the belt input
-                // belt takes input from hatch...
-                let output_hatch = &mut machines[start].output[start_hatch_index];
-                buffer[0] = output_hatch.buffer;
-                output_hatch.buffer = Item::invalid();
+                let predicate = buffer.last().unwrap().is_invalid() || input_hatch.buffer.can_accumulate_from(buffer.last().unwrap());
+
+                // order of operations:
+                // transfer last element in belt buffer to input hatch
+                // roll elements in belt buffer one to the right
+                // transfer output hatch item to first element in belt buffer
+                if predicate {
+                    *last_transfer_ticks = *tick;
+
+                    // godot::global::godot_print!("belt shifting");
+
+                    // element at index buffer.len()-1 is belt output
+                    let input_hatch = &mut machines[end].input[end_hatch_index];
+                    Item::transfer_limited(buffer.last_mut().unwrap(), &mut input_hatch.buffer, 1);
+
+                    // I'm shifting... I'm shifting....
+                    buffer.rotate_right(1);
+
+                    // first element must be reset to invalid now...
+                    buffer[0].invalidate();
+
+                    // element at index 0 is the belt input
+                    // belt takes input from hatch...
+                    let output_hatch = &mut machines[start].output[start_hatch_index];
+                    Item::transfer_limited(&mut output_hatch.buffer, &mut buffer[0], 1);
+                }
             }
         }
+
+        *tick += 1;
     }
 
     fn do_progress(machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
@@ -684,6 +698,7 @@ impl Game {
             belt_start: output_hatch,
             belt_end: input_hatch,
             buffer: vec![Item::invalid(); 8],
+            last_transfer_tick: 0,
         })
     }
 
@@ -692,6 +707,7 @@ impl Game {
             belt_start: output_hatch,
             belt_end: input_hatch,
             buffer: vec![Item::invalid(); buffer_length.max(2)],
+            last_transfer_tick: 0
         })
     }
 
