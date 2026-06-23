@@ -133,11 +133,18 @@ impl INode3D for MachineNode {
         
         self.key = bound.game.add_machine_with_pole(&CRUSH_IRON_RECIPE, pole.key);
 
-        bound.game.machines[self.key].input[0].buffer = Item { id: RAW_IRON_1, count: 8 };
+        *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: RAW_IRON_1, count: 8 };
 
         for child in self.base().get_children().iter_shared() {
             if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
-                hatch_node.bind_mut().owning_machine_key = self.key;
+                let mut node = hatch_node.bind_mut();
+
+                // update the HatchNode key based on the generated hatch keys when inserting into the manager
+                if node.input_hatch {
+                    node.key = bound.game.machines[self.key].input[node.hatch_index as usize];
+                } else {
+                    node.key = bound.game.machines[self.key].output[node.hatch_index as usize];
+                }
             }
         }
     }
@@ -152,7 +159,7 @@ impl INode3D for MachineNode {
         let mut label = self.base().get_node_as::<Label3D>("Label3D");
         let status = &bound.game.machines[self.key].status;
         let progress = &bound.game.machines[self.key].progress;
-        let output_hatch = &bound.game.machines[self.key].output[0].buffer;
+        // let output_hatch = &bound.game.machines[self.key].output[0].buffer;
         
         //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
         //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
@@ -181,7 +188,7 @@ struct HatchNode {
     #[export]
     input_hatch: bool,
 
-    owning_machine_key: MachineKey,
+    key: HatchKey,
 }
 
 #[godot_api]
@@ -191,7 +198,7 @@ impl INode3D for HatchNode {
             base,
             input_hatch: false,
             hatch_index: 0,
-            owning_machine_key: MachineKey::null(),
+            key: HatchKey::null()
         }
     }
 
@@ -204,14 +211,8 @@ impl INode3D for HatchNode {
         let bound = factory_manager.bind();
 
         let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        let machine = &bound.game.machines[self.owning_machine_key];
+        let item = bound.game.hatches[self.key].buffer;
         
-        let item: Item = if self.input_hatch {
-            machine.input[self.hatch_index as usize].buffer
-        } else {
-            machine.output[self.hatch_index as usize].buffer
-        };
-
         label.set_text(&item.display());
     }
 }
@@ -221,17 +222,10 @@ impl INode3D for HatchNode {
 struct BeltNode {
     base: Base<Node3D>,
 
-    #[var]
+    #[export]
     belt_start_hatch_ref: Option<Gd<HatchNode>>,
-    #[var]
+    #[export]
     belt_end_hatch_ref: Option<Gd<HatchNode>>,
-    #[var]
-    length: i64,
-
-    #[var]
-    start_position: Vector3,
-    #[var]
-    end_position: Vector3,
 
     items: Vec<Option<Gd<Node3D>>>,
     
@@ -245,9 +239,6 @@ impl INode3D for BeltNode {
             base,
             belt_start_hatch_ref: None,
             belt_end_hatch_ref: None,
-            start_position: Vector3::ZERO,
-            end_position: Vector3::ZERO,
-            length: 0,
             items: Vec::new(),
             key: BeltKey::null()
         }
@@ -260,18 +251,26 @@ impl INode3D for BeltNode {
         let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
         let mut bound = factory_manager.bind_mut();
 
-        let mut start_hatch = self.belt_start_hatch_ref.clone().unwrap();
-        let start_hatch_machine = start_hatch.get_parent().unwrap().cast::<MachineNode>().bind().key;
-        let start_hatch = start_hatch.bind_mut();
+        let start_hatch = self.belt_start_hatch_ref.clone().unwrap();
+        let start_hatch = start_hatch.bind();
 
 
-        let mut end_hatch = self.belt_end_hatch_ref.clone().unwrap();
-        let end_hatch_machine = end_hatch.get_parent().unwrap().cast::<MachineNode>().bind().key;
-        let end_hatch = end_hatch.bind_mut();
+        let end_hatch = self.belt_end_hatch_ref.clone().unwrap();
+        let end_hatch = end_hatch.bind();
 
-        let output_hatch = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
-        let input_hatch = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
-        self.key = bound.game.add_belt_2(output_hatch, input_hatch, self.length as usize);
+        let input_hatch = end_hatch.key;
+        let output_hatch = start_hatch.key;
+        
+        // let output_hatch = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
+        // let input_hatch = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
+
+        let a = start_hatch.base().get_global_position();
+        let b = end_hatch.base().get_global_position();
+        let length = Vector3::distance_to(a,b);
+
+        // TODO: add "buffer length" scaling factor 
+        self.key = bound.game.add_belt_2(output_hatch, input_hatch, length as usize);
+        godot::global::godot_print!("{:?}", self.key);
     }
 
     fn process(&mut self, _delta: f32) {
@@ -291,8 +290,8 @@ impl INode3D for BeltNode {
         let tick_interpolation_factor = tick_interpolation_factor.clamp(0f32, 1f32);
 
         let scene = load::<PackedScene>("res://item.tscn");
-        let a = self.start_position;
-        let b = self.end_position;
+        let a = self.belt_start_hatch_ref.as_ref().unwrap().bind().base().get_global_position();
+        let b = self.belt_end_hatch_ref.as_ref().unwrap().bind().base().get_global_position();
 
         // TODO: don't spawn / despawn entities every frame bruh
         for x in self.items.drain(..) {
@@ -379,9 +378,9 @@ struct WireNode {
     base: Base<Node3D>,
     key: WireKey,
 
-    #[var]
+    #[export]
     pole_1_ref: Option<Gd<PoleNode>>,
-    #[var]
+    #[export]
     pole_2_ref: Option<Gd<PoleNode>>,
 }
 

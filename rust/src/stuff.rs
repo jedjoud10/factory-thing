@@ -15,18 +15,9 @@ pub type LoadUnit = isize;
 pub type HealthUnit = u8;
 
 #[derive(Debug)]
-pub struct HatchReference {
-    pub machine_index: MachineKey,
-
-    // we inherently know if this is an Input or Output hatch since the Belt stores the belt_start and belt_end information
-    // ex: belt_end could only refer to input hatches since that's the only hatch direction they can connect to
-    pub hatch_index: usize,
-}
-
-#[derive(Debug)]
 pub struct Belt {
-    pub belt_start: HatchReference,
-    pub belt_end: HatchReference,
+    pub belt_start: HatchKey,
+    pub belt_end: HatchKey,
     pub buffer: Vec<Item>,
     pub last_transfer_tick: u64,
 }
@@ -72,8 +63,8 @@ pub enum MachineStatus {
 
 #[derive(Default, Debug)]
 pub struct Machine {
-    pub input: Vec<Hatch>,
-    pub output: Vec<Hatch>,
+    pub input: Vec<HatchKey>,
+    pub output: Vec<HatchKey>,
     pub recipe: Option<&'static Recipe>,
     pub progress: Option<Progress>,
     pub status: MachineStatus,
@@ -176,6 +167,7 @@ pub struct Wire {
 
 #[derive(Default)]
 pub struct Game {
+    pub hatches: SlotMap<HatchKey, Hatch>,
     pub machines: SlotMap<MachineKey, Machine>,
     pub belts: SlotMap<BeltKey, Belt>,
     pub poles: SlotMap<PoleKey, Pole>,
@@ -197,6 +189,7 @@ impl Game {
             belts,
             poles,
             wires,
+            hatches,
             tick,
         } = self;
 
@@ -362,7 +355,7 @@ impl Game {
                 _ => unreachable!(),
             });
 
-            let opt_reset_progress = Self::do_progress(machine, satisfied_and_target_load);
+            let opt_reset_progress = Self::do_progress(hatches, machine, satisfied_and_target_load);
 
             if let Some(reset_progress_reason) = opt_reset_progress {
                 // reset consumption pole
@@ -387,24 +380,26 @@ impl Game {
                     let inputs_match_recipe_input =
                         recipe.input.iter().zip(machine.input.iter()).all(
                             |(recipe_input_item, input_hatch)| {
-                                input_hatch.buffer.id == recipe_input_item.id
-                                    && input_hatch.buffer.count >= recipe_input_item.count
+                                let buffer = hatches[*input_hatch].buffer;
+                                buffer.id == recipe_input_item.id
+                                    && buffer.count >= recipe_input_item.count
                             },
                         );
                     let outputs_match_recipe_output =
                         recipe.output.iter().zip(machine.output.iter()).all(
                             |(recipe_output_item, output_hatch)| {
-                                if output_hatch.buffer.is_invalid() {
+                                let buffer = hatches[*output_hatch].buffer;
+                                if buffer.is_invalid() {
                                     return true;
                                 }
 
                                 // if the item is the same, must make sure that we have enough space in the hatch to place it 
-                                let same_id = output_hatch.buffer.id == recipe_output_item.id;
-                                let stack_size = REGISTRY[output_hatch.buffer.id as usize].stack_size;
+                                let same_id = buffer.id == recipe_output_item.id;
+                                let stack_size = REGISTRY[buffer.id as usize].stack_size;
 
                                 // this CAN overflow if stack size is at MAX
                                 // if we know it will overflow, then we cannot process the recipe
-                                let opt_non_overflowing_enough_space_considering_stack_size = output_hatch.buffer.count.checked_add(recipe_output_item.count).map(|x| x <= stack_size);
+                                let opt_non_overflowing_enough_space_considering_stack_size = buffer.count.checked_add(recipe_output_item.count).map(|x| x <= stack_size);
                                 same_id && opt_non_overflowing_enough_space_considering_stack_size.unwrap_or_default()
                             },
                         );
@@ -448,22 +443,14 @@ impl Game {
 
         for belt in belts.values_mut() {
             let Belt {
-                belt_start:
-                    HatchReference {
-                        machine_index: start,
-                        hatch_index: start_hatch_index,
-                    },
-                belt_end:
-                    HatchReference {
-                        machine_index: end,
-                        hatch_index: end_hatch_index,
-                    },
+                belt_start,
+                belt_end,
                 ref mut buffer,
                 last_transfer_tick: ref mut last_transfer_ticks,
             } = *belt;
 
             // don't do anything if belt points to invalid hatches
-            if !machines.contains_key(start) || !machines.contains_key(end) {
+            if !hatches.contains_key(belt_start) || !hatches.contains_key(belt_end) {
                 continue;
             }
 
@@ -471,13 +458,8 @@ impl Game {
             if (*tick - *last_transfer_ticks) >= 16 {
                 // godot::global::godot_print!("belt tick");
                 
-                // belt start
-                let output_hatch = &machines[start].output[start_hatch_index];
-
-                // belt end
-                let input_hatch = &machines[end].input[end_hatch_index];
-
-                let predicate = buffer.last().unwrap().is_invalid() || input_hatch.buffer.can_accumulate_from(buffer.last().unwrap());
+                let input_hatch = &hatches[belt_end];
+                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
 
                 // order of operations:
                 // transfer last element in belt buffer to input hatch
@@ -489,7 +471,7 @@ impl Game {
                     // godot::global::godot_print!("belt shifting");
 
                     // element at index buffer.len()-1 is belt output
-                    let input_hatch = &mut machines[end].input[end_hatch_index];
+                    let input_hatch = &mut hatches[belt_end];
                     Item::transfer_limited(buffer.last_mut().unwrap(), &mut input_hatch.buffer, 1);
 
                     // I'm shifting... I'm shifting....
@@ -500,7 +482,7 @@ impl Game {
 
                     // element at index 0 is the belt input
                     // belt takes input from hatch...
-                    let output_hatch = &mut machines[start].output[start_hatch_index];
+                    let output_hatch = &mut hatches[belt_start];
                     Item::transfer_limited(&mut output_hatch.buffer, &mut buffer[0], 1);
                 }
             }
@@ -509,7 +491,7 @@ impl Game {
         *tick += 1;
     }
 
-    fn do_progress(machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
+    fn do_progress(hatches: &mut SlotMap<HatchKey, Hatch>, machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
         // godot::global::godot_print!("{:?}", satisfied_and_target_load);
         let reset_progress = if let Some(progress) = machine.progress.as_mut() {
             if let Some((satisfied, target)) = satisfied_and_target_load {
@@ -575,16 +557,18 @@ impl Game {
     
                     // take items from input hatches
                     for (recipe_input, hatch_input) in
-                        recipe.input.iter().zip(machine.input.iter_mut())
+                        recipe.input.iter().zip(machine.input.iter())
                     {
-                        hatch_input.buffer.take(recipe_input);
+                        let buffer = &mut hatches[*hatch_input].buffer;
+                        buffer.take(recipe_input);
                     }
     
                     // put items in output hatches
                     for (recipe_output, hatch_output) in
-                        recipe.output.iter().zip(machine.output.iter_mut())
+                        recipe.output.iter().zip(machine.output.iter())
                     {
-                        hatch_output.buffer.accumulate(recipe_output);
+                        let buffer = &mut hatches[*hatch_output].buffer;
+                        buffer.accumulate(recipe_output);
                     }
     
                     // reset machine progress
@@ -606,9 +590,13 @@ impl Game {
     pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
         self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
 
+        // TODO: scale number of hatches with required recipe I/O
+        let input = self.hatches.insert(Hatch::empty());
+        let output = self.hatches.insert(Hatch::empty());
+        
         let machine = Machine {
-            input: vec![Hatch::empty()],
-            output: vec![Hatch::empty()],
+            input: vec![input],
+            output: vec![output],
             recipe: Some(&recipe),
             progress: None,
             pole: Some(pole_key),
@@ -621,9 +609,13 @@ impl Game {
     pub fn add_machine(&mut self, recipe: &'static Recipe) -> (MachineKey, PoleKey) {
         let pole_id = self.poles.insert(Pole::Consumer { target_load: 0, current_load: 0 });
 
+        // TODO: scale number of hatches with required recipe I/O
+        let input = self.hatches.insert(Hatch::empty());
+        let output = self.hatches.insert(Hatch::empty());
+
         let machine = Machine {
-            input: vec![Hatch::empty()],
-            output: vec![Hatch::empty()],
+            input: vec![input],
+            output: vec![output],
             recipe: Some(&recipe),
             progress: None,
             pole: Some(pole_id),
@@ -635,7 +627,10 @@ impl Game {
     }
 
     pub fn remove_machine(&mut self, key: MachineKey) {
-        self.machines.remove(key);
+        let m = self.machines.remove(key).unwrap();
+        for hatch in m.input.iter().chain(m.output.iter()) {
+            self.hatches.remove(*hatch).unwrap();
+        }
     }
 
     // not really adding...
@@ -680,6 +675,8 @@ impl Game {
     }
 
     pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
+        assert!(a != b);
+
         self.add_wire_with_max_flow(a, b, LoadUnit::MAX)
     }
 
@@ -693,7 +690,9 @@ impl Game {
         }).collect::<Vec<WireKey>>()
     }
 
-    pub fn add_belt(&mut self, output_hatch: HatchReference, input_hatch: HatchReference) -> BeltKey {
+    pub fn add_belt(&mut self, output_hatch: HatchKey, input_hatch: HatchKey) -> BeltKey {
+        assert!(output_hatch != input_hatch);
+
         self.belts.insert(Belt {
             belt_start: output_hatch,
             belt_end: input_hatch,
@@ -702,7 +701,9 @@ impl Game {
         })
     }
 
-    pub fn add_belt_2(&mut self, output_hatch: HatchReference, input_hatch: HatchReference, buffer_length: usize) -> BeltKey {
+    pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, buffer_length: usize) -> BeltKey {
+        assert!(output_hatch != input_hatch);
+
         self.belts.insert(Belt {
             belt_start: output_hatch,
             belt_end: input_hatch,
@@ -717,15 +718,16 @@ impl Game {
     
     
     pub fn get_input_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
-        &mut self.machines[machine_id].input[hatch_index].buffer
+        &mut self.hatches[self.machines[machine_id].input[hatch_index]].buffer
     }
 
     pub fn get_output_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
-        &mut self.machines[machine_id].output[hatch_index].buffer
+        &mut self.hatches[self.machines[machine_id].output[hatch_index]].buffer
     }
 }
 
 fn main() {
+    /*
     let mut game = Game::default();
 
     let pole_id_generator = game.add_infinite_generator();
@@ -746,4 +748,5 @@ fn main() {
     }
 
     dbg!(game.machines[machine_index_2].output[0].buffer);
+    */
 }

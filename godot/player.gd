@@ -82,10 +82,17 @@ func get_looking_at_actor() -> Node3D:
 			print("select actor ", parent)
 			return parent
 	return null
+
+var mouse_visible: bool = false
 	
 func _input(event):
 	if event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		mouse_visible = !mouse_visible
+		
+		if (mouse_visible):
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		else:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event.is_action_pressed("place_actor"):
 		place_actor()
 	elif event.is_action_pressed("remove_actor"):
@@ -186,9 +193,6 @@ func place_actor() -> void:
 			var belt = node as BeltNode
 			belt.belt_start_hatch_ref = fst_selected_actor as HatchNode
 			belt.belt_end_hatch_ref = snd_selected_actor as HatchNode
-			belt.start_position = fst_selected_actor.global_position
-			belt.end_position = snd_selected_actor.global_position
-			belt.length = d as int
 			
 			
 			fst_selected_actor = null

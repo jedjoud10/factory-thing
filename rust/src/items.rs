@@ -47,35 +47,36 @@ impl Item {
             return;
         }
 
-        if dst.is_invalid() {
-            // invalid target, move entire stack
-            *dst = *src; 
-            *src = Item::invalid();
-        } else if dst.id == src.id {
-            // same ID, do transfer but STACK LIMITED
-            let stack_size = REGISTRY[src.id as usize].stack_size;
-
-            // remaining slots in DST that can be filled
-            let remaining_slots = stack_size - dst.count;
-
-            // limited by src count as well
-            let transferred_amount = remaining_slots.min(src.count);
-
-            // limited by transfer count as well
-            let transferred_amount = transferred_amount.min(max_transfer_count);
-        
-            assert!(transferred_amount <= stack_size);
-            assert!(transferred_amount <= src.count);
-            
-
-            dst.count += transferred_amount;
-            src.count -= transferred_amount;
-
-            if src.count == 0 {
-                src.invalidate();
-            }
-        } else {
+        if dst.id != src.id && !dst.is_invalid() {
             // different ID, don't accumulate
+            return;
+        }
+
+        // src ID is valid (but dst ID can be invalid), do transfer but STACK LIMITED
+        let stack_size = REGISTRY[src.id as usize].stack_size;
+
+        // remaining slots in DST that can be filled
+        let remaining_slots = stack_size - if dst.is_invalid() { 0 } else { dst.count };
+
+        // limited by src count as well
+        let transferred_amount = remaining_slots.min(src.count);
+
+        // limited by transfer count as well
+        let transferred_amount = transferred_amount.min(max_transfer_count);
+    
+        assert!(transferred_amount <= stack_size);
+        assert!(transferred_amount <= src.count);
+        
+
+        dst.count += transferred_amount;
+        src.count -= transferred_amount;
+
+        if dst.count > 0 {
+            dst.id = src.id;
+        }
+
+        if src.count == 0 {
+            src.invalidate();
         }
     }
 
