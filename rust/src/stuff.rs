@@ -165,6 +165,14 @@ pub struct Wire {
     pub damage: HealthUnit,
 }
 
+#[derive(Debug)]
+pub struct Silo {
+    pub input: HatchKey,
+    pub output: HatchKey,
+    pub stack: Vec<Item>,
+}
+
+
 #[derive(Default)]
 pub struct Game {
     pub hatches: SlotMap<HatchKey, Hatch>,
@@ -172,6 +180,7 @@ pub struct Game {
     pub belts: SlotMap<BeltKey, Belt>,
     pub poles: SlotMap<PoleKey, Pole>,
     pub wires: SlotMap<WireKey, Wire>,
+    pub silos: SlotMap<SiloKey, Silo>,
     pub tick: u64,
 }
 
@@ -191,6 +200,7 @@ impl Game {
             wires,
             hatches,
             tick,
+            silos,
         } = self;
 
         // before we reset wire flow, check for max flow and do damage tick
@@ -441,6 +451,29 @@ impl Game {
             }
         }
 
+        for silo in silos.values_mut() {
+            let input = &mut hatches[silo.input].buffer;
+            let mut taken = Item::invalid();
+            Item::transfer_limited(input, &mut taken, 16);
+
+            if !taken.is_invalid() {
+                silo.stack.push(taken);
+            }
+
+            if let Some(last) = silo.stack.last_mut() {
+                let predicate = hatches[silo.output].buffer.can_accumulate_from(last);
+
+                if predicate {
+                    let output = &mut hatches[silo.output].buffer;
+                    Item::transfer_limited(last, output, 16);
+
+                    if last.is_invalid() {
+                        silo.stack.pop().unwrap();
+                    }
+                }
+            }
+        }
+
         for belt in belts.values_mut() {
             let Belt {
                 belt_start,
@@ -631,6 +664,23 @@ impl Game {
         for hatch in m.input.iter().chain(m.output.iter()) {
             self.hatches.remove(*hatch).unwrap();
         }
+    }
+
+    pub fn add_silo(&mut self) -> SiloKey {
+        let input = self.hatches.insert(Hatch::empty());
+        let output = self.hatches.insert(Hatch::empty());
+
+        self.silos.insert(Silo {
+            input,
+            output,
+            stack: Vec::default(),
+        })
+    }
+
+    pub fn remove_silo(&mut self, key: SiloKey) {
+        let m = self.silos.remove(key).unwrap();
+        self.hatches.remove(m.input);
+        self.hatches.remove(m.output);
     }
 
     // not really adding...

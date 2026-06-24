@@ -65,6 +65,7 @@ func _process(delta: float) -> void:
 enum ActorType {
 	Machine,
 	PowerPole,
+	Silo,
 	Wire,
 	Belt
 }
@@ -102,7 +103,10 @@ func _input(event):
 		selected_actor_type = ActorType.Machine
 	elif event.is_action_pressed("select_pole_as_actor"):
 		print("select pole as actor")
-		selected_actor_type = ActorType.PowerPole	
+		selected_actor_type = ActorType.PowerPole
+	elif event.is_action_pressed("select_silo_as_actor"):
+		print("select silo as actor")
+		selected_actor_type = ActorType.Silo
 	elif event.is_action_pressed("select_wire_as_actor"):
 		print("select wire as actor")
 		fst_selected_actor = null
@@ -125,6 +129,7 @@ func _input(event):
 		
 var machine_scene = preload("res://machine.tscn")
 var power_pole_scene = preload("res://pole.tscn")
+var silo_scene = preload("res://silo.tscn")
 var wire_scene = preload("res://wire.tscn")
 var belt_scene = preload("res://belt.tscn")
 
@@ -138,6 +143,8 @@ func place_actor() -> void:
 			instance = machine_scene.instantiate()
 		ActorType.PowerPole:
 			instance = power_pole_scene.instantiate()
+		ActorType.Silo:
+			instance = silo_scene.instantiate()
 		ActorType.Wire:
 			if ((fst_selected_actor as PoleNode) == null || (snd_selected_actor as PoleNode) == null):
 				print("need to select two poles to wire up")

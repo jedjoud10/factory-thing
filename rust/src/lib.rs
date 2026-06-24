@@ -179,6 +179,85 @@ impl INode3D for MachineNode {
 
 #[derive(GodotClass)]
 #[class(base=Node3D)]
+struct SiloNode {
+    base: Base<Node3D>,
+    key: SiloKey,
+    
+    #[export]
+    starting_item_id: u32,
+
+    #[export]
+    starting_item_count: u32,
+
+    #[export]
+    starting_item_stacks: u32,
+}
+
+#[godot_api]
+impl INode3D for SiloNode {
+    fn init(base: Base<Node3D>) -> Self {
+        Self {
+            base,
+            key: SiloKey::null(),
+            starting_item_id: 0,
+            starting_item_count: 0,
+            starting_item_stacks: 0,
+        }
+    }
+
+    fn ready(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        self.key = bound.game.add_silo();
+
+        bound.game.silos[self.key].stack.extend(std::iter::repeat(Item::new(self.starting_item_id as u8, self.starting_item_count as u8)).take(self.starting_item_stacks as usize));
+
+        for child in self.base().get_children().iter_shared() {
+            if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
+                let mut node = hatch_node.bind_mut();
+
+                // update the HatchNode key based on the generated hatch keys when inserting into the manager
+                if node.input_hatch {
+                    node.key = bound.game.silos[self.key].input;
+                } else {
+                    node.key = bound.game.silos[self.key].output;
+                }
+            }
+        }
+    }
+
+    fn process(&mut self, _delta: f32) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        let mut label = self.base().get_node_as::<Label3D>("Label3D");
+        // let output_hatch = &bound.game.machines[self.key].output[0].buffer;
+        
+        //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
+        //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
+    }
+
+    fn exit_tree(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        bound.game.remove_silo(self.key);
+    }
+}
+
+
+#[derive(GodotClass)]
+#[class(base=Node3D)]
 struct HatchNode {
     base: Base<Node3D>,
 
@@ -273,7 +352,10 @@ impl INode3D for BeltNode {
         godot::global::godot_print!("{:?}", self.key);
     }
 
-    fn process(&mut self, _delta: f32) {
+    
+    // TODO: because some physics tick can be skipped (when running in sped-up mode, for example), this can cause a desync between world time and tick time
+    // easiest fix is to get this to run on a tick basis instead. this *will* give chopped animations...
+    fn physics_process(&mut self, _delta: f32) {
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
@@ -281,12 +363,13 @@ impl INode3D for BeltNode {
         let bound = factory_manager.bind();
 
         // https://github.com/JL-squared/Factory-ECS-Prototype/blob/main/Assets/Actors/Systems/VisualSystems.cs#L625
-        let tick_rate = 60;
         let belt = &bound.game.belts[self.key];
         let last_transfer_tick = belt.last_transfer_tick;
-        let last_transfer_time = last_transfer_tick as f32 / tick_rate as f32;
+
         let belt_ticks_between_transfers = 16;
-        let tick_interpolation_factor = (bound.real_time - last_transfer_time) * (tick_rate as f32 / belt_ticks_between_transfers as f32);
+        let diff = (bound.game.tick - last_transfer_tick) as f32 / belt_ticks_between_transfers as f32;
+
+        let tick_interpolation_factor = diff;
         let tick_interpolation_factor = tick_interpolation_factor.clamp(0f32, 1f32);
 
         let scene = load::<PackedScene>("res://item.tscn");

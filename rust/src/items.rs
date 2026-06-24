@@ -94,14 +94,14 @@ impl Item {
         self.count += other.count;
     }
 
-    pub const fn can_accumulate_from(&self, other: &Item) -> bool {
+    pub fn can_accumulate_from(&self, other: &Item) -> bool {
         if other.is_invalid() {
             return false;
         }
 
         if self.is_invalid() {
             true
-        } else if self.id == other.id && self.count + other.count <= REGISTRY[self.id as usize].stack_size {
+        } else if self.id == other.id && self.count.checked_add(other.count).map(|res| res <= REGISTRY[self.id as usize].stack_size).unwrap_or_default() {
             true
         } else {
             false
