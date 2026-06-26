@@ -1,4 +1,5 @@
 rust/target
+builds/
 
 # Godot 4.2+ specific ignores
 godot/~*.dll

@@ -20,7 +20,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0.002)
 shape = SubResource("BoxShape3D_6a4ke")
 
 [node name="Label3D" type="Label3D" parent="." unique_id=1784675617]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8173234, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.754977, 1.8173234, 0)
 billboard = 1
 text = "Silo"
 

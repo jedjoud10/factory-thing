@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use godot::prelude::*;
 use godot::classes::*;
 
@@ -91,15 +93,11 @@ impl INode3D for PoleNode {
         let mut bound = factory_manager.bind_mut();
         
         bound.game.remove_pole(self.key);
-        self.signals().about_to_get_removed().emit();
     }
 }
 
 #[godot_api]
-impl PoleNode {
-    #[signal]
-    fn about_to_get_removed();
-}
+impl PoleNode {}
 
 #[derive(GodotClass)]
 #[class(base=Node3D)]
@@ -234,14 +232,23 @@ impl INode3D for SiloNode {
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
-        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let mut bound = factory_manager.bind_mut();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
 
         let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        // let output_hatch = &bound.game.machines[self.key].output[0].buffer;
-        
-        //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
-        //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
+        let silo = &bound.game.silos[self.key];
+        let mut total = HashMap::<u8, u32>::new();
+
+        for stack in silo.stack.iter() {
+            *total.entry(stack.id).or_default() += stack.count as u32;
+        }
+
+        let mut str = String::new();
+        for (id, count) in total {
+            let name = &REGISTRY[id as usize].name;
+            str += &format!("{name} x {count}\n");
+        }
+        label.set_text(&str);
     }
 
     fn exit_tree(&mut self) {
@@ -296,6 +303,9 @@ impl INode3D for HatchNode {
     }
 }
 
+#[godot_api]
+impl HatchNode {}
+
 #[derive(GodotClass)]
 #[class(base=Node3D)]
 struct BeltNode {
@@ -331,18 +341,17 @@ impl INode3D for BeltNode {
         let mut bound = factory_manager.bind_mut();
 
         let start_hatch = self.belt_start_hatch_ref.clone().unwrap();
+        start_hatch.signals().tree_exiting().connect_other(self, Self::hatch_destroyed);
         let start_hatch = start_hatch.bind();
 
 
         let end_hatch = self.belt_end_hatch_ref.clone().unwrap();
+        end_hatch.signals().tree_exiting().connect_other(self, Self::hatch_destroyed);
         let end_hatch = end_hatch.bind();
 
         let input_hatch = end_hatch.key;
         let output_hatch = start_hatch.key;
         
-        // let output_hatch = HatchReference { machine_index: start_hatch_machine, hatch_index: start_hatch.hatch_index as usize };
-        // let input_hatch = HatchReference { machine_index: end_hatch_machine, hatch_index: end_hatch.hatch_index as usize };
-
         let a = start_hatch.base().get_global_position();
         let b = end_hatch.base().get_global_position();
         let length = Vector3::distance_to(a,b);
@@ -411,6 +420,12 @@ impl INode3D for BeltNode {
     }
 }
 
+#[godot_api]
+impl BeltNode {
+    fn hatch_destroyed(&mut self) {
+        self.base_mut().queue_free();
+    }
+}
 
 
 
@@ -444,14 +459,6 @@ impl INode3D for GeneratorNode {
         pole.owned = true;
 
         bound.game.add_generator_with_pole(self.load as LoadUnit, pole.key);
-    }
-
-    fn exit_tree(&mut self) {
-        let tree = self.base().get_tree();
-        let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
-        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let mut bound = factory_manager.bind_mut();
     }
 }
 
@@ -488,13 +495,13 @@ impl INode3D for WireNode {
         let mut pole_1 = self.pole_1_ref.clone().unwrap();
         let mut pole_1 = pole_1.bind_mut();
         let pole_1_key = pole_1.key;
-        pole_1.signals().about_to_get_removed().connect_other(self, Self::pole_destroyed);
+        pole_1.signals().tree_exiting().connect_other(self, Self::pole_destroyed);
 
         
         let mut pole_2 = self.pole_2_ref.clone().unwrap();
         let mut pole_2 = pole_2.bind_mut();
         let pole_2_key = pole_2.key;
-        pole_2.signals().about_to_get_removed().connect_other(self, Self::pole_destroyed);
+        pole_2.signals().tree_exiting().connect_other(self, Self::pole_destroyed);
         
         self.key = bound.game.add_wire(pole_1_key, pole_2_key);
     }

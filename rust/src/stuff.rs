@@ -775,28 +775,3 @@ impl Game {
         &mut self.hatches[self.machines[machine_id].output[hatch_index]].buffer
     }
 }
-
-fn main() {
-    /*
-    let mut game = Game::default();
-
-    let pole_id_generator = game.add_infinite_generator();
-    let other_pole = game.add_pole();
-    game.add_wire(pole_id_generator, other_pole);
-
-    let (machine_index, pole_id_machine) = game.add_machine(&CRUSH_IRON_RECIPE);
-    game.get_input_hatch_mut(machine_index, 0).accumulate(&Item::new(RAW_IRON_1, 16));
-    game.add_wire(other_pole, pole_id_machine);
-
-    let (machine_index_2, pole_id_machine_2) = game.add_machine(&CRUSH_IRON_MORE_RECIPE);
-    game.add_wire(other_pole, pole_id_machine_2);
-
-    game.add_belt(HatchReference { machine_index, hatch_index: 0 }, HatchReference { machine_index: machine_index_2, hatch_index: 0 });    
-
-    for _ in 0..3000 {
-        game.tick();
-    }
-
-    dbg!(game.machines[machine_index_2].output[0].buffer);
-    */
-}
