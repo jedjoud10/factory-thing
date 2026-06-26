@@ -8,6 +8,7 @@ pub mod handle;
 pub mod items;
 pub mod stuff;
 pub mod tests;
+mod registry;
 
 pub use fluid::*;
 pub use handle::*;
@@ -16,6 +17,9 @@ use slotmap::Key;
 use slotmap::KeyData;
 use slotmap::SecondaryMap;
 pub use stuff::*;
+
+use crate::registry::DefaultRegistry;
+use crate::registry::Registry;
 
 
 struct MyExtension;
@@ -29,13 +33,14 @@ unsafe impl ExtensionLibrary for MyExtension {}
 struct FactoryManager {
     base: Base<Node3D>,
     real_time: f32,
-    game: Game,
+    game: Game<DefaultRegistry>,
 }
 
 
 #[godot_api]
 impl INode3D for FactoryManager {
     fn init(base: Base<Node3D>) -> Self {
+
         Self {
             base,
             real_time: 0f32,
@@ -129,9 +134,9 @@ impl INode3D for MachineNode {
         pole.owned = true;
         self.pole_key = pole.key;
         
-        self.key = bound.game.add_machine_with_pole(&CRUSH_IRON_RECIPE, pole.key);
+        self.key = bound.game.add_machine_with_pole(&DefaultRegistry::CRUSH_IRON_RECIPE, pole.key);
 
-        *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: RAW_IRON_1, count: 8 };
+        *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: DefaultRegistry::RAW_IRON_1, count: 8 };
 
         for child in self.base().get_children().iter_shared() {
             if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
@@ -245,7 +250,7 @@ impl INode3D for SiloNode {
 
         let mut str = String::new();
         for (id, count) in total {
-            let name = &REGISTRY[id as usize].name;
+            let name = DefaultRegistry::name(id);
             str += &format!("{name} x {count}\n");
         }
         label.set_text(&str);
@@ -299,7 +304,7 @@ impl INode3D for HatchNode {
         let mut label = self.base().get_node_as::<Label3D>("Label3D");
         let item = bound.game.hatches[self.key].buffer;
         
-        label.set_text(&item.display());
+        label.set_text(&item.display::<DefaultRegistry>());
     }
 }
 

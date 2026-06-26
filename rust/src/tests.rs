@@ -1,12 +1,15 @@
 use super::*;
 
 mod power_tests {
+    use crate::registry::TestRegistry;
     use super::*;
+
+    type TestGame = Game<TestRegistry>;
     
 
     #[test]
     fn simple_power() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let a = game.add_generator(10);
         let b = game.add_consumer(10);
         let wire = game.add_wire(a, b);
@@ -32,7 +35,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_inv() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let a = game.add_generator(10);
         let b = game.add_consumer(10);
         let wire = game.add_wire(b, a);
@@ -57,7 +60,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_inv_2() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let b = game.add_consumer(10);
         let a = game.add_generator(10);
         let wire = game.add_wire(a, b);
@@ -82,7 +85,7 @@ mod power_tests {
 
     #[test]
     fn poles_not_connected() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let _ = game.add_consumer(10);
         let _ = game.add_generator(10);
         game.tick();
@@ -90,7 +93,7 @@ mod power_tests {
 
     #[test]
     fn overloaded_wire() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let b = game.add_consumer(10);
         let a = game.add_generator(10);
         let wire = game.add_wire_with_max_flow(a, b, 1);
@@ -142,7 +145,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_split_load_equally() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let a = game.add_generator(10);
         let b = game.add_consumer(5);
         let c = game.add_consumer(5);
@@ -179,7 +182,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_split_load_inequally() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
         let a = game.add_generator(10);
         let b = game.add_consumer(7);
         let c = game.add_consumer(3);
@@ -215,7 +218,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_chain() {
-        let mut game = Game::default();
+        let mut game = TestGame::default();
 
         let mut poles = vec![];
         poles.push(Pole::Generator {
@@ -264,7 +267,7 @@ mod power_tests {
     fn no_power_machine_no_items() {
         let mut game = Game::default();
         let a = game.add_generator(10);
-        let (_, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        let (_, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         
         let wire = game.add_wire(a,b);
         
@@ -276,10 +279,10 @@ mod power_tests {
     fn no_power_machine_halt_reason_output_full() {
         let mut game = Game::default();
         let a = game.add_generator(10);
-        let (m, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        let (m, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         
-        *game.get_input_hatch_mut(m, 0) = Item::full_stack(RAW_IRON_1);
-        *game.get_output_hatch_mut(m, 0) = Item::full_stack(CRUSHED_IRON);
+        *game.get_input_hatch_mut(m, 0) = Item::full_stack::<TestRegistry>(TestRegistry::RAW_IRON_1);
+        *game.get_output_hatch_mut(m, 0) = Item::full_stack::<TestRegistry>(TestRegistry::CRUSHED_IRON);
 
 
         let wire = game.add_wire(a,b);
@@ -292,10 +295,10 @@ mod power_tests {
     fn no_power_machine_halt_reason_output_type_mismatch() {
         let mut game = Game::default();
         let a = game.add_generator(10);
-        let (m, b) = game.add_machine(&CRUSH_IRON_RECIPE);
+        let (m, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         
-        *game.get_input_hatch_mut(m, 0) = Item::full_stack(RAW_IRON_1);
-        *game.get_output_hatch_mut(m, 0) = Item::one(RAW_IRON_1);
+        *game.get_input_hatch_mut(m, 0) = Item::full_stack::<TestRegistry>(TestRegistry::RAW_IRON_1);
+        *game.get_output_hatch_mut(m, 0) = Item::one(TestRegistry::RAW_IRON_1);
 
 
         let wire = game.add_wire(a,b);
@@ -304,7 +307,7 @@ mod power_tests {
         assert_no_power(game, a, b, wire);
     }
 
-    fn assert_no_power(game: Game, a: PoleKey, b: PoleKey, wire: WireKey) {
+    fn assert_no_power(game: TestGame, a: PoleKey, b: PoleKey, wire: WireKey) {
         assert!(matches!(
             game.poles[a],
             Pole::Generator {

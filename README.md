@@ -114,9 +114,39 @@ They need to be cooled in order to run efficiently and not overheat. There could
 Some machines *require* to be heated for efficient operations (I am unsure of what these machines are but it seems like a decent assumption that these exist lol). This can allow the user to implement more efficient setups that try to minimize wasted heat.
 For example, one can re-use the generated heat from machines and use it for some other machines that require it, perchance...
 
+What *hopefully* makes solving problems consisting of this system a bit more different than the usual is that now you *dont need to* use specific "connectors" (belts / wires) to transfer units across space. you can use air as a medium itself.
 
-## In-Depth Smelting
+## Item Properties
+Each instantiated item could have some properties associated with it:
+- Temperature
+- Softness
+- Magnetism
+- Conductivity
+- Dirtyness
+- Perhaps even molecular composition percentages
+
+Some machines will only be able to work if the items are in the correct ranges for the appropriate recipe. For example:
+- to be able to craft `[placeholder] plates` out of `[placeholder] ingots`, the ingots need to *soft enough* to be able to be flattened / stamped / whatever the hell the process is to get iron plates. 
+- to be able to craft `[placeholder] ingots` out of `[placeholder] dust`, the dust needs to be dry and mixed with the right shit to be able to smelt into the proper metallic alloy. it must also be relatively clean (i.e not dirty)
+
+This is akin to making multiple permutations of each item: `clean iron ingot`, `dirty iron ingot`, `rusty iron ingot`, `hot iron ingot`, but without blowing up the registry with permutations.
+
+The question is, if we consider `molecular composition percentages`, we have ambiguity:
+- we could have a "mixed iron + carbon" item that represents iron mixed with carbon OR
+- we could have a "mixed alloy" item with molecular composition of iron + carbon
+
+With this system in mind, we could have containers *that change how the item properties change over time*. Example:
+- Some silos that are *well insulated* keep the contained items' temperature inside the silo
+
+## In-Depth Smelting: Builds Upon Item Properties
 Something something melting point and carbon content percentage graph
+
+## Archetypes / Tiers: Builds Upon Item Properties
+Some belts and or containers can only contain items of a specific type and within appropriate item property ranges.
+
+Rubber conveyor belts will only be able to transfer solid items that weight less than a specific amount
+
+Cleat conveyor belts can transfer dusts or grainy materials (crushed / dust / small particulate) 
 
 ## Computing & Digitalization
 At some point, you will advance in the tech tree enough to be able to afford computers and computer parts.
@@ -124,6 +154,9 @@ For the coolness effect these should be very big (i.e room sized at minimum) bec
 
 Something something system similar to AE2 where you can "digitalize" your storage. No auto-crafting though as that's already implemented by, well, the factory.
 Maybe digital storage could be used in the same way that storage drones work in Factorio? (i.e only used to move items in / out of a shared place without needing to resort to belts)
+
+# Thinking
+In the Create Mod, machines are "shapeless". They do their functions on the items below them, in depots or belts. Ex: The `mechanical press`, converts `ingots` into `plates`, but it *also* has other use cases
 
 # Test
 

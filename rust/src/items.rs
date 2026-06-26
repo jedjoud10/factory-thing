@@ -1,11 +1,4 @@
-use crate::REGISTRY;
-
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct RegistryItem {
-    pub name: &'static str,
-    pub stack_size: u8,
-}
+use crate::registry;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Item {
@@ -18,8 +11,8 @@ impl Item {
         Self { id, count: 1 }
     }
 
-    pub const fn full_stack(id: u8) -> Self {
-        Self { id, count: REGISTRY[id as usize].stack_size }
+    pub fn full_stack<R: registry::Registry>(id: u8) -> Self {
+        Self { id, count: R::stack_size(id) }
     }
 
     pub const fn new(id: u8, count: u8) -> Self {
@@ -42,7 +35,7 @@ impl Item {
     // `from` can be invalid
     // `to` can be invalid
     // this will do the transfer appropriately. modifies both
-    pub fn transfer_limited(src: &mut Item, dst: &mut Item, max_transfer_count: u8) {
+    pub fn transfer_limited<R: registry::Registry>(src: &mut Item, dst: &mut Item, max_transfer_count: u8) {
         if src.is_invalid() {
             return;
         }
@@ -53,7 +46,7 @@ impl Item {
         }
 
         // src ID is valid (but dst ID can be invalid), do transfer but STACK LIMITED
-        let stack_size = REGISTRY[src.id as usize].stack_size;
+        let stack_size = R::stack_size(src.id);
 
         // remaining slots in DST that can be filled
         let remaining_slots = stack_size - if dst.is_invalid() { 0 } else { dst.count };
@@ -80,13 +73,13 @@ impl Item {
         }
     }
 
-    pub const fn accumulate(&mut self, other: &Item) {
+    pub fn accumulate<R: registry::Registry>(&mut self, other: &Item) {
         assert!(self.is_invalid() || self.id == other.id);
 
         if !self.is_invalid() {
             let checked = self.count.checked_add(other.count);
             assert!(checked.is_some(), "accumulation count overflow integer type");
-            let stack_size = REGISTRY[self.id as usize].stack_size;
+            let stack_size = R::stack_size(self.id);
             assert!(matches!(checked, Some(x) if x <= stack_size), "accumulation count overflow stack size");
         }
 
@@ -94,25 +87,25 @@ impl Item {
         self.count += other.count;
     }
 
-    pub fn can_accumulate_from(&self, other: &Item) -> bool {
+    pub fn can_accumulate_from<R: registry::Registry>(&self, other: &Item) -> bool {
         if other.is_invalid() {
             return false;
         }
 
         if self.is_invalid() {
             true
-        } else if self.id == other.id && self.count.checked_add(other.count).map(|res| res <= REGISTRY[self.id as usize].stack_size).unwrap_or_default() {
+        } else if self.id == other.id && self.count.checked_add(other.count).map(|res| res <= R::stack_size(self.id)).unwrap_or_default() {
             true
         } else {
             false
         }
     }
 
-    pub fn display(&self) -> String {
+    pub fn display<R: registry::Registry>(&self) -> String {
         if self.is_invalid() {
             "Invalid".to_string()
         } else {
-            format!("\"{}\" ({})", REGISTRY[self.id as usize].name, self.count)
+            format!("\"{}\" ({})", R::name(self.id), self.count)
         }
     }
 
@@ -129,65 +122,64 @@ impl Item {
     }
 }
 
-
 mod item_tests {
     use super::*;
-    use crate::stuff::*;
+    use crate::{registry::{Registry, TestRegistry}, stuff::*};
 
 
     #[test]
     fn single_item() {
         assert!(Item::invalid().is_invalid());
 
-        let item = Item::one(RAW_IRON_1);
+        let item = Item::one(TestRegistry::RAW_IRON_1);
         assert!(!item.is_invalid());
-        assert_eq!(item, Item { id: RAW_IRON_1, count: 1 });
+        assert_eq!(item, Item { id: TestRegistry::RAW_IRON_1, count: 1 });
     }
 
     #[test]
     fn invalidate_item() {
-        let mut item = Item::one(RAW_IRON_1);
+        let mut item = Item::one(TestRegistry::RAW_IRON_1);
         assert!(!item.is_invalid());
         item.invalidate();
         assert!(item.is_invalid());
         
-        let mut item = Item::one(RAW_IRON_1);
+        let mut item = Item::one(TestRegistry::RAW_IRON_1);
         assert!(!item.is_invalid());
-        item.take(&Item::one(RAW_IRON_1));
+        item.take(&Item::one(TestRegistry::RAW_IRON_1));
         assert!(item.is_invalid());
     }
 
     #[test]
     fn take_item() {
-        let mut item = Item::new(RAW_IRON_1, 10);
+        let mut item = Item::new(TestRegistry::RAW_IRON_1, 10);
         assert_eq!(item.count, 10);
-        item.take(&Item::one(RAW_IRON_1));
+        item.take(&Item::one(TestRegistry::RAW_IRON_1));
         assert_eq!(item.count, 9);
     }
 
     #[test]
     #[should_panic]
     fn take_item_too_much() {
-        let mut item = Item::new(RAW_IRON_1, 1);
+        let mut item = Item::new(TestRegistry::RAW_IRON_1, 1);
         assert_eq!(item.count, 1);
 
         // should cause a subtract with overflow; panic
-        item.take(&Item::new(RAW_IRON_1, 10));
+        item.take(&Item::new(TestRegistry::RAW_IRON_1, 10));
     }
 
     #[test]
     fn accumulate_item() {
-        let mut item = Item::new(RAW_IRON_1, 10);
+        let mut item = Item::new(TestRegistry::RAW_IRON_1, 10);
         assert_eq!(item.count, 10);
-        item.accumulate(&Item::one(RAW_IRON_1));
+        item.accumulate::<TestRegistry>(&Item::one(TestRegistry::RAW_IRON_1));
         assert_eq!(item.count, 11);
     }
 
     #[test]
     #[should_panic]
     fn accumulate_item_stack_limit() {
-        let mut item = Item::full_stack(RAW_IRON_1);
-        assert_eq!(item.count, REGISTRY[RAW_IRON_1 as usize].stack_size);
-        item.accumulate(&Item::one(RAW_IRON_1));
+        let mut item = Item::full_stack::<TestRegistry>(TestRegistry::RAW_IRON_1);
+        assert_eq!(item.count, TestRegistry::stack_size(TestRegistry::RAW_IRON_1));
+        item.accumulate::<TestRegistry>(&Item::one(TestRegistry::RAW_IRON_1));
     }
 }

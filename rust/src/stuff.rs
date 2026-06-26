@@ -8,7 +8,7 @@ use slotmap::{SlotMap, new_key_type};
 
 
 
-use crate::items::*;
+use crate::{items::*, registry::{self, Recipe}};
 use crate::handle::*;
 
 pub type LoadUnit = isize;
@@ -71,73 +71,6 @@ pub struct Machine {
     pub pole: Option<PoleKey>,
 }
 
-pub const RAW_IRON_1: u8 = 1;
-
-pub const CRUSHED_IRON: u8 = 2;
-
-pub const IRON_DUST: u8 = 3;
-
-pub const IRON_INGOT: u8 = 4;
-
-pub const REGISTRY: &'static [RegistryItem] = &[
-    RegistryItem {
-        name: "invalid",
-        stack_size: 0,
-    },
-    RegistryItem {
-        name: "Raw Iron",
-        stack_size: 255,
-    },
-    RegistryItem {
-        name: "Crushed Iron",
-        stack_size: 255,
-    },
-    RegistryItem {
-        name: "Iron Dust",
-        stack_size: 255,
-    },
-    RegistryItem {
-        name: "Iron Ingot",
-        stack_size: 255,
-    },
-];
-
-#[derive(Debug)]
-pub struct Recipe {
-    pub input: &'static [Item],
-    pub output: &'static [Item],
-    pub ticks: u16,
-    pub load: LoadUnit,
-}
-
-pub const CRUSH_IRON_RECIPE: Recipe = Recipe {
-    input: &[Item::one(RAW_IRON_1)],
-    output: &[Item::one(CRUSHED_IRON)],
-    ticks: 16,
-    load: 10,
-};
-
-pub const CRUSH_IRON_ALTERNATIVE_BATCH_RECIPE: Recipe = Recipe {
-    input: &[Item::new(RAW_IRON_1, 4)],
-    output: &[Item::new(CRUSHED_IRON, 4)],
-    ticks: 16,
-    load: 10,
-};
-
-pub const CRUSH_IRON_MORE_RECIPE: Recipe = Recipe {
-    input: &[Item::one(CRUSHED_IRON)],
-    output: &[Item::one(IRON_DUST)],
-    ticks: 16,
-    load: 10,
-};
-
-pub const SMELT_IRON_RECIPE: Recipe = Recipe {
-    input: &[Item::one(IRON_DUST)],
-    output: &[Item::one(IRON_INGOT)],
-    ticks: 4,
-    load: 0,
-};
-
 #[derive(Debug)]
 pub enum Pole {
     // generator pole
@@ -174,7 +107,7 @@ pub struct Silo {
 
 
 #[derive(Default)]
-pub struct Game {
+pub struct Game<R: registry::Registry> {
     pub hatches: SlotMap<HatchKey, Hatch>,
     pub machines: SlotMap<MachineKey, Machine>,
     pub belts: SlotMap<BeltKey, Belt>,
@@ -182,6 +115,7 @@ pub struct Game {
     pub wires: SlotMap<WireKey, Wire>,
     pub silos: SlotMap<SiloKey, Silo>,
     pub tick: u64,
+    pub registry: R
 }
 
 #[derive(PartialEq, Eq)]
@@ -191,7 +125,7 @@ enum ResetProgressReason {
     NoProgress,
 }
 
-impl Game {
+impl<R: registry::Registry> Game<R> {
     pub fn tick(&mut self) {
         let Self {
             machines,
@@ -201,6 +135,7 @@ impl Game {
             hatches,
             tick,
             silos,
+            ..
         } = self;
 
         // before we reset wire flow, check for max flow and do damage tick
@@ -405,7 +340,7 @@ impl Game {
 
                                 // if the item is the same, must make sure that we have enough space in the hatch to place it 
                                 let same_id = buffer.id == recipe_output_item.id;
-                                let stack_size = REGISTRY[buffer.id as usize].stack_size;
+                                let stack_size = R::stack_size(buffer.id);
 
                                 // this CAN overflow if stack size is at MAX
                                 // if we know it will overflow, then we cannot process the recipe
@@ -454,18 +389,18 @@ impl Game {
         for silo in silos.values_mut() {
             let input = &mut hatches[silo.input].buffer;
             let mut taken = Item::invalid();
-            Item::transfer_limited(input, &mut taken, 16);
+            Item::transfer_limited::<R>(input, &mut taken, 16);
 
             if !taken.is_invalid() {
                 silo.stack.push(taken);
             }
 
             if let Some(last) = silo.stack.last_mut() {
-                let predicate = hatches[silo.output].buffer.can_accumulate_from(last);
+                let predicate = hatches[silo.output].buffer.can_accumulate_from::<R>(last);
 
                 if predicate {
                     let output = &mut hatches[silo.output].buffer;
-                    Item::transfer_limited(last, output, 16);
+                    Item::transfer_limited::<R>(last, output, 16);
 
                     if last.is_invalid() {
                         silo.stack.pop().unwrap();
@@ -492,7 +427,7 @@ impl Game {
                 // godot::global::godot_print!("belt tick");
                 
                 let input_hatch = &hatches[belt_end];
-                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
+                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from::<R>(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
 
                 // order of operations:
                 // transfer last element in belt buffer to input hatch
@@ -505,7 +440,7 @@ impl Game {
 
                     // element at index buffer.len()-1 is belt output
                     let input_hatch = &mut hatches[belt_end];
-                    Item::transfer_limited(buffer.last_mut().unwrap(), &mut input_hatch.buffer, 1);
+                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, 1);
 
                     // I'm shifting... I'm shifting....
                     buffer.rotate_right(1);
@@ -516,7 +451,7 @@ impl Game {
                     // element at index 0 is the belt input
                     // belt takes input from hatch...
                     let output_hatch = &mut hatches[belt_start];
-                    Item::transfer_limited(&mut output_hatch.buffer, &mut buffer[0], 1);
+                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], 1);
                 }
             }
         }
@@ -601,7 +536,7 @@ impl Game {
                         recipe.output.iter().zip(machine.output.iter())
                     {
                         let buffer = &mut hatches[*hatch_output].buffer;
-                        buffer.accumulate(recipe_output);
+                        buffer.accumulate::<R>(recipe_output);
                     }
     
                     // reset machine progress
@@ -619,7 +554,7 @@ impl Game {
     }
 }
 
-impl Game {
+impl<R: registry::Registry> Game<R> {
     pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
         self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
 
