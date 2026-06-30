@@ -326,104 +326,63 @@ mod power_tests {
     }
 }
 
-/*
 mod tests {
+    /*
     use std::num::NonZeroU16;
+    use crate::registry::TestRegistry;
+
+    type TestGame = Game<TestRegistry>;
+
 
     use super::*;
-    #[allow(dead_code)]
-    fn wire(a: usize, b: usize) -> Wire {
-        Wire {
-            a: PoleId::from(a),
-            b: PoleId::from(b),
-            flow: 0,
-            damage: 0,
-            max_flow: LoadUnit::MAX
-        }
-    }
-
-    #[allow(dead_code)]
-    fn placeholder_machine_with_output_hatch(tmp: Item) -> Machine {
-        Machine {
-            output: vec![Hatch { buffer: tmp }],
-            ..Default::default()
-        }
-    }
-
-    #[allow(dead_code)]
-    fn placeholder_machine_with_input_hatch(tmp: Item) -> Machine {
-        Machine {
-            input: vec![Hatch { buffer: tmp }],
-            ..Default::default()
-        }
-    }
-
-
+    
     #[test]
     fn empty() {
-        Game::default().tick();
+        TestGame::default().tick();
     }
 
     #[test]
     fn simple_machine_power() {
-        let mut game = Game {
-            poles: vec![
-                Pole::Generator {
-                    max_load: 10,
-                    current_load: 0,
-                },
-                Pole::Consumer {
-                    target_load: 0,
-                    current_load: 0,
-                },
-            ],
-            wires: vec![wire(0, 1)],
-            machines: vec![Machine {
-                input: vec![Hatch {
-                    buffer: CRUSH_IRON_RECIPE.input[0],
-                }],
-                output: vec![Hatch::empty()],
-                recipe: Some(&CRUSH_IRON_RECIPE),
-                progress: None,
-                pole: Some(PoleId::from(1)),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        let mut game = TestGame::default();
+        
+        let generator_pole = game.add_generator(10);
+        let (machine, machine_pole) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
+        let wire = game.add_wire(generator_pole, machine_pole);
+        *game.get_input_hatch_mut(machine, 0) = TestRegistry::CRUSH_IRON_RECIPE.input[0];
 
         // no power yet
         assert!(matches!(
-            game.poles[0],
+            game.poles[generator_pole],
             Pole::Generator {
                 current_load: 0,
                 ..
             }
         ));
         assert!(matches!(
-            game.poles[1],
+            game.poles[machine_pole],
             Pole::Consumer {
                 current_load: 0,
                 ..
             }
         ));
-        assert!(game.wires[0].flow == 0);
-        assert!(game.machines[0].progress.is_none());
+        assert!(game.wires[wire].flow == 0);
+        assert!(game.machines[machine].progress.is_none());
 
         game.tick();
 
         // first tick simply sets recipe and TARGET load of consumer
         assert!(matches!(
-            game.poles[0],
+            game.poles[generator_pole],
             Pole::Generator {
                 current_load: 0,
                 ..
             }
         ));
         assert!(
-            matches!(game.poles[1], Pole::Consumer { current_load: 0, target_load } if target_load == CRUSH_IRON_RECIPE.load)
+            matches!(game.poles[machine_pole], Pole::Consumer { current_load: 0, target_load } if target_load == TestRegistry::CRUSH_IRON_RECIPE.load)
         );
-        assert!(game.wires[0].flow == 0);
-        assert!(game.machines[0].progress.is_some());
+        assert!(game.wires[wire].flow == 0);
+        assert!(game.machines[machine].progress.is_some());
 
         game.tick();
 
@@ -431,20 +390,22 @@ mod tests {
 
         // second tick actually propagates power generation
         assert!(matches!(
-            game.poles[0],
+            game.poles[generator_pole],
             Pole::Generator {
                 current_load: 10,
                 ..
             }
         ));
         assert!(
-            matches!(game.poles[1], Pole::Consumer { current_load, target_load } if target_load == CRUSH_IRON_RECIPE.load && current_load == CRUSH_IRON_RECIPE.load)
+            matches!(game.poles[machine_pole], Pole::Consumer { current_load, target_load } if target_load == TestRegistry::CRUSH_IRON_RECIPE.load && current_load == TestRegistry::CRUSH_IRON_RECIPE.load)
         );
-        assert!(game.wires[0].flow == 10);
-        assert!(matches!(game.machines[0].status, MachineStatus::None));
-        assert!(matches!(game.machines[0].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_none() ));
+        assert!(game.wires[wire].flow == 10);
+        assert!(matches!(game.machines[machine].status, MachineStatus::None));
+        assert!(matches!(game.machines[machine].progress, Some(Progress { slow_down_ticks_remaining, .. }) if slow_down_ticks_remaining.is_none() ));
     }
+    */
 
+    /*
     #[test]
     fn simple_machine_underpowered() {
         let mut game = Game {
@@ -879,5 +840,5 @@ mod tests {
         assert!(game.machines[0].progress.is_none());
         assert_eq!(game.machines[0].status, MachineStatus::RecipeOutputResourcesMismatchOrFull);
     }
+    */
 }
-*/

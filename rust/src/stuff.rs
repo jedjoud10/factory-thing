@@ -22,6 +22,11 @@ pub struct Belt {
     pub last_transfer_tick: u64,
 }
 
+pub enum BeltSize {
+    BufferLength(u32),
+    WorldLength(f32),
+}
+
 #[derive(Debug)]
 pub struct Hatch {
     pub buffer: Item,
@@ -105,6 +110,25 @@ pub struct Silo {
     pub stack: Vec<Item>,
 }
 
+pub struct Settings {
+    pub wire_damage_per_tick: Option<u8>,
+    pub belt_buffer_scaling_factor: f32,
+    pub belt_ticks_between_transfers: u64,
+    pub belt_transfer_size: u8,
+    pub silo_transfer_size: u8,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            wire_damage_per_tick: None,
+            belt_buffer_scaling_factor: 2f32,
+            belt_ticks_between_transfers: 16,
+            belt_transfer_size: 1,
+            silo_transfer_size: 1,
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct Game<R: registry::Registry> {
@@ -114,6 +138,7 @@ pub struct Game<R: registry::Registry> {
     pub poles: SlotMap<PoleKey, Pole>,
     pub wires: SlotMap<WireKey, Wire>,
     pub silos: SlotMap<SiloKey, Silo>,
+    pub settings: Settings,
     pub tick: u64,
     pub registry: R
 }
@@ -139,13 +164,16 @@ impl<R: registry::Registry> Game<R> {
         } = self;
 
         // before we reset wire flow, check for max flow and do damage tick
-        for wire in wires.values_mut() {
-            if wire.flow.abs() > wire.max_flow {
-                wire.damage = wire.damage.saturating_add(1);
+        if let Some(wire_damage_per_tick) = self.settings.wire_damage_per_tick {
+            for wire in wires.values_mut() {
+                if wire.flow.abs() > wire.max_flow {
+                    wire.damage = wire.damage.saturating_add(wire_damage_per_tick);
+                }
             }
+
+            wires.retain(|_, w| w.damage < u8::MAX);
         }
 
-        wires.retain(|_, w| w.damage < u8::MAX);
 
         // create adjacency map that stores neighbouring poles
         let mut lookup = HashMap::<PoleKey, Vec<(PoleKey, WireKey)>>::new();
@@ -389,7 +417,7 @@ impl<R: registry::Registry> Game<R> {
         for silo in silos.values_mut() {
             let input = &mut hatches[silo.input].buffer;
             let mut taken = Item::invalid();
-            Item::transfer_limited::<R>(input, &mut taken, 16);
+            Item::transfer_limited::<R>(input, &mut taken, self.settings.silo_transfer_size);
 
             if !taken.is_invalid() {
                 silo.stack.push(taken);
@@ -400,7 +428,7 @@ impl<R: registry::Registry> Game<R> {
 
                 if predicate {
                     let output = &mut hatches[silo.output].buffer;
-                    Item::transfer_limited::<R>(last, output, 16);
+                    Item::transfer_limited::<R>(last, output, self.settings.silo_transfer_size);
 
                     if last.is_invalid() {
                         silo.stack.pop().unwrap();
@@ -423,7 +451,7 @@ impl<R: registry::Registry> Game<R> {
             }
 
             // impossible that it overflows because self.tick > last_transfer_ticks, always
-            if (*tick - *last_transfer_ticks) >= 16 {
+            if (*tick - *last_transfer_ticks) >= self.settings.belt_ticks_between_transfers {
                 // godot::global::godot_print!("belt tick");
                 
                 let input_hatch = &hatches[belt_end];
@@ -440,7 +468,7 @@ impl<R: registry::Registry> Game<R> {
 
                     // element at index buffer.len()-1 is belt output
                     let input_hatch = &mut hatches[belt_end];
-                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, 1);
+                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, self.settings.belt_transfer_size);
 
                     // I'm shifting... I'm shifting....
                     buffer.rotate_right(1);
@@ -451,7 +479,7 @@ impl<R: registry::Registry> Game<R> {
                     // element at index 0 is the belt input
                     // belt takes input from hatch...
                     let output_hatch = &mut hatches[belt_start];
-                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], 1);
+                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], self.settings.belt_transfer_size);
                 }
             }
         }
@@ -686,13 +714,18 @@ impl<R: registry::Registry> Game<R> {
         })
     }
 
-    pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, buffer_length: usize) -> BeltKey {
+    pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, length: BeltSize) -> BeltKey {
         assert!(output_hatch != input_hatch);
+
+        let buffer_length = match length {
+            BeltSize::BufferLength(x) => x as f32,
+            BeltSize::WorldLength(x) => x * self.settings.belt_buffer_scaling_factor,
+        }.ceil().max(2f32) as usize;
 
         self.belts.insert(Belt {
             belt_start: output_hatch,
             belt_end: input_hatch,
-            buffer: vec![Item::invalid(); buffer_length.max(2)],
+            buffer: vec![Item::invalid(); buffer_length],
             last_transfer_tick: 0
         })
     }

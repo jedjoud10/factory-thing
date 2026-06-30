@@ -136,7 +136,7 @@ impl INode3D for MachineNode {
         
         self.key = bound.game.add_machine_with_pole(&DefaultRegistry::CRUSH_IRON_RECIPE, pole.key);
 
-        *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: DefaultRegistry::RAW_IRON_1, count: 8 };
+        // *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: DefaultRegistry::RAW_IRON_1, count: 8 };
 
         for child in self.base().get_children().iter_shared() {
             if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
@@ -361,8 +361,7 @@ impl INode3D for BeltNode {
         let b = end_hatch.base().get_global_position();
         let length = Vector3::distance_to(a,b);
 
-        // TODO: add "buffer length" scaling factor 
-        self.key = bound.game.add_belt_2(output_hatch, input_hatch, length as usize);
+        self.key = bound.game.add_belt_2(output_hatch, input_hatch, BeltSize::WorldLength(length));
         godot::global::godot_print!("{:?}", self.key);
     }
 
@@ -380,7 +379,7 @@ impl INode3D for BeltNode {
         let belt = &bound.game.belts[self.key];
         let last_transfer_tick = belt.last_transfer_tick;
 
-        let belt_ticks_between_transfers = 16;
+        let belt_ticks_between_transfers = bound.game.settings.belt_ticks_between_transfers;
         let diff = (bound.game.tick - last_transfer_tick) as f32 / belt_ticks_between_transfers as f32;
 
         let tick_interpolation_factor = diff;

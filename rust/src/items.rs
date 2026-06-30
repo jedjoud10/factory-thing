@@ -109,6 +109,8 @@ impl Item {
         }
     }
 
+    // assumes `other` is not invalid
+    // assumes `other` has the same id as `self`
     pub const fn take(&mut self, other: &Item) {
         assert!(!other.is_invalid());
         assert!(self.id == other.id);
@@ -124,62 +126,242 @@ impl Item {
 
 mod item_tests {
     use super::*;
-    use crate::{registry::{Registry, TestRegistry}, stuff::*};
+    use crate::{registry::{Registry, RegistryItem}, stuff::*};
+
+    
+    #[derive(Default)]
+    pub struct ItemTestRegistry;
+
+    impl ItemTestRegistry {
+        pub const ITEM_WITH_STACK_SIZE_1: u8 = 1;
+        pub const ITEM_WITH_STACK_SIZE_16: u8 = 2;
+        pub const ITEM_WITH_STACK_SIZE_255: u8 = 3;
+
+        pub const ITEMS: &[RegistryItem] = &[
+            RegistryItem {
+                name: "invalid",
+                stack_size: 0,
+            },
+            RegistryItem {
+                name: "Item with stack size 1",
+                stack_size: 1,
+            },
+            RegistryItem {
+                name: "Item with stack size 16",
+                stack_size: 16,
+            },
+            RegistryItem {
+                name: "Iron with stack size 255",
+                stack_size: 255,
+            },
+        ];
+    }
+
+    impl Registry for ItemTestRegistry {
+        fn registry_item(id: u8) -> &'static RegistryItem {
+            &Self::ITEMS[id as usize]
+        }
+    }
 
 
     #[test]
     fn single_item() {
         assert!(Item::invalid().is_invalid());
 
-        let item = Item::one(TestRegistry::RAW_IRON_1);
+        let item = Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
         assert!(!item.is_invalid());
-        assert_eq!(item, Item { id: TestRegistry::RAW_IRON_1, count: 1 });
+        assert_eq!(item, Item { id: ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, count: 1 });
     }
 
     #[test]
     fn invalidate_item() {
-        let mut item = Item::one(TestRegistry::RAW_IRON_1);
+        let mut item = Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
         assert!(!item.is_invalid());
         item.invalidate();
         assert!(item.is_invalid());
         
-        let mut item = Item::one(TestRegistry::RAW_IRON_1);
+        let mut item = Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
         assert!(!item.is_invalid());
-        item.take(&Item::one(TestRegistry::RAW_IRON_1));
+        item.take(&Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255));
         assert!(item.is_invalid());
     }
 
     #[test]
     fn take_item() {
-        let mut item = Item::new(TestRegistry::RAW_IRON_1, 10);
+        let mut item = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
         assert_eq!(item.count, 10);
-        item.take(&Item::one(TestRegistry::RAW_IRON_1));
+        item.take(&Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255));
         assert_eq!(item.count, 9);
     }
 
     #[test]
     #[should_panic]
     fn take_item_too_much() {
-        let mut item = Item::new(TestRegistry::RAW_IRON_1, 1);
+        let mut item = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 1);
         assert_eq!(item.count, 1);
 
         // should cause a subtract with overflow; panic
-        item.take(&Item::new(TestRegistry::RAW_IRON_1, 10));
+        item.take(&Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10));
     }
 
     #[test]
     fn accumulate_item() {
-        let mut item = Item::new(TestRegistry::RAW_IRON_1, 10);
+        let mut item = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
         assert_eq!(item.count, 10);
-        item.accumulate::<TestRegistry>(&Item::one(TestRegistry::RAW_IRON_1));
+        item.accumulate::<ItemTestRegistry>(&Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255));
         assert_eq!(item.count, 11);
     }
 
     #[test]
     #[should_panic]
     fn accumulate_item_stack_limit() {
-        let mut item = Item::full_stack::<TestRegistry>(TestRegistry::RAW_IRON_1);
-        assert_eq!(item.count, TestRegistry::stack_size(TestRegistry::RAW_IRON_1));
-        item.accumulate::<TestRegistry>(&Item::one(TestRegistry::RAW_IRON_1));
+        let mut item = Item::full_stack::<ItemTestRegistry>(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
+        assert_eq!(item.count, ItemTestRegistry::stack_size(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255));
+        item.accumulate::<ItemTestRegistry>(&Item::one(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255));
+    }
+
+    #[test]
+    fn transfer_total_src_inalid_dst_invalid() {
+        let mut src = Item::invalid();
+        let mut dst = Item::invalid();
+        assert!(src.is_invalid());
+        assert!(dst.is_invalid());
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert!(src.is_invalid());
+        assert!(dst.is_invalid());
+    }
+
+    #[test]
+    fn transfer_total_src_valid_dst_invalid() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::invalid();
+        assert_eq!(src.count, 10);
+        assert!(dst.is_invalid());
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert_eq!(dst.count, 10);
+        assert!(src.is_invalid());
+    }
+
+    #[test]
+    fn transfer_total_src_valid_dst_valid_diff_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 15);
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+    }
+
+    #[test]
+    fn transfer_total_src_valid_dst_valid_same_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 15);
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert!(src.is_invalid());
+        assert_eq!(dst.count, 25);
+    }
+    
+    #[test]
+    fn transfer_partial_src_valid_dst_invalid() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::invalid();
+        assert_eq!(src.count, 10);
+        assert!(dst.is_invalid());
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 2);
+        
+        assert_eq!(src.count, 8);
+        assert_eq!(src.id, ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
+        assert_eq!(dst.count, 2);
+        assert_eq!(dst.id, ItemTestRegistry::ITEM_WITH_STACK_SIZE_255);
+    }
+
+    #[test]
+    fn transfer_partial_src_valid_dst_valid_diff_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 15);
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 2);
+        
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+    }
+
+    #[test]
+    fn transfer_partial_src_valid_dst_valid_same_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 10);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 15);
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 2);
+        
+        assert_eq!(src.count, 8);
+        assert_eq!(dst.count, 17);
+    }
+
+    #[test]
+    fn transfer_partial_stack_size_limited_src_valid_dst_invalid() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 16);
+        let mut dst = Item::invalid();
+        assert_eq!(src.count, 16);
+        assert!(dst.is_invalid());
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert!(src.is_invalid());
+        assert_eq!(dst.count, 16);
+    }
+
+    #[test]
+    fn transfer_partial_stack_size_limited_src_valid_dst_valid_diff_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 16);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_255, 15);
+        assert_eq!(src.count, 16);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert_eq!(src.count, 16);
+        assert_eq!(dst.count, 15);
+    }
+
+    #[test]
+    fn transfer_partial_stack_size_limited_src_valid_dst_valid_same_id() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 10);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 15);
+        assert_eq!(src.count, 10);
+        assert_eq!(dst.count, 15);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert_eq!(src.count, 9);
+        assert_eq!(dst.count, 16);
+    }
+
+    #[test]
+    fn transfer_partial_stack_size_limited_src_valid_dst_valid_same_id_2() {
+        let mut src = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 16);
+        let mut dst = Item::new(ItemTestRegistry::ITEM_WITH_STACK_SIZE_16, 16);
+        assert_eq!(src.count, 16);
+        assert_eq!(dst.count, 16);
+        
+        Item::transfer_limited::<ItemTestRegistry>(&mut src, &mut dst, 255);
+        
+        assert_eq!(src.count, 16);
+        assert_eq!(dst.count, 16);
     }
 }
