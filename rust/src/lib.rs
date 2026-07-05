@@ -9,6 +9,7 @@ pub mod items;
 pub mod stuff;
 pub mod tests;
 mod registry;
+mod heat;
 
 pub use fluid::*;
 pub use handle::*;

@@ -507,7 +507,7 @@ impl<R: registry::Registry> Game<R> {
                         // 100% result in 1 ticks (which will get reset immediately after it gets set)
                         // 50% result in 2 ticks
                         // 25% result in 4 ticks
-                        // TODO: replace this, as we cannot represent efficiencies >50% but <100% in slow down ticks
+                        // TODO: replace this, as we cannot represent inefficiencies >50% but <100% in slow down ticks
                         let inv = (1.0f32 / percent) as u16;
                         progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
                     }
