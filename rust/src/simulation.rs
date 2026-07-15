@@ -131,7 +131,7 @@ impl Default for Settings {
 }
 
 #[derive(Default)]
-pub struct Game<R: registry::Registry> {
+pub struct Simulation<R: registry::Registry> {
     pub hatches: SlotMap<HatchKey, Hatch>,
     pub machines: SlotMap<MachineKey, Machine>,
     pub belts: SlotMap<BeltKey, Belt>,
@@ -150,7 +150,7 @@ enum ResetProgressReason {
     NoProgress,
 }
 
-impl<R: registry::Registry> Game<R> {
+impl<R: registry::Registry> Simulation<R> {
     pub fn tick(&mut self) {
         let Self {
             machines,
@@ -347,8 +347,8 @@ impl<R: registry::Registry> Game<R> {
                 }
 
                 if let Some(recipe) = machine.recipe {
-                    assert_eq!(recipe.input.len(), machine.input.len());
-                    assert_eq!(recipe.output.len(), machine.output.len());
+                    assert_eq!(recipe.input.len(), machine.input.len(), "machine recipe input items count and input hatches count do not match");
+                    assert_eq!(recipe.output.len(), machine.output.len(), "machine recipe output items count and output hatches count do not match");
 
                     let inputs_match_recipe_input =
                         recipe.input.iter().zip(machine.input.iter()).all(
@@ -582,7 +582,7 @@ impl<R: registry::Registry> Game<R> {
     }
 }
 
-impl<R: registry::Registry> Game<R> {
+impl<R: registry::Registry> Simulation<R> {
     pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
         self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
 
@@ -620,6 +620,24 @@ impl<R: registry::Registry> Game<R> {
 
         let machine_id = self.machines.insert(machine);
         (machine_id, pole_id)
+    }
+
+    pub fn add_miner_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
+        self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
+
+        // TODO: scale number of hatches with required recipe I/O
+        let output = self.hatches.insert(Hatch::empty());
+        
+        let machine = Machine {
+            input: vec![],
+            output: vec![output],
+            recipe: Some(&recipe),
+            progress: None,
+            pole: Some(pole_key),
+            ..Default::default()
+        };
+
+        self.machines.insert(machine)
     }
 
     pub fn remove_machine(&mut self, key: MachineKey) {

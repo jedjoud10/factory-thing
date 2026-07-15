@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://dv1lgeycs4fd8"]
+
+[ext_resource type="PackedScene" uid="uid://d3krewvxtmeji" path="res://models/Dust Mesh A.blend" id="1_7mc6o"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_xmvc4"]
+size = Vector3(5, 2.5009766, 5)
+
+[node name="Deposit" type="Node3D" unique_id=1243883866]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1761280112]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1325311340]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2495117, 0)
+shape = SubResource("BoxShape3D_xmvc4")
+
+[node name="Dust Mesh A" parent="." unique_id=948352550 instance=ExtResource("1_7mc6o")]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0)

@@ -4,7 +4,7 @@ mod power_tests {
     use crate::registry::TestRegistry;
     use super::*;
 
-    type TestGame = Game<TestRegistry>;
+    type TestGame = Simulation<TestRegistry>;
     
 
     #[test]
@@ -265,7 +265,7 @@ mod power_tests {
 
     #[test]
     fn no_power_machine_no_items() {
-        let mut game = Game::default();
+        let mut game = Simulation::default();
         let a = game.add_generator(10);
         let (_, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         
@@ -277,7 +277,7 @@ mod power_tests {
 
     #[test]
     fn no_power_machine_halt_reason_output_full() {
-        let mut game = Game::default();
+        let mut game = Simulation::default();
         let a = game.add_generator(10);
         let (m, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         
@@ -293,7 +293,7 @@ mod power_tests {
 
     #[test]
     fn no_power_machine_halt_reason_output_type_mismatch() {
-        let mut game = Game::default();
+        let mut game = Simulation::default();
         let a = game.add_generator(10);
         let (m, b) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);
         

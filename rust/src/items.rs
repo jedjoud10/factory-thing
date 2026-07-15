@@ -126,7 +126,7 @@ impl Item {
 
 mod item_tests {
     use super::*;
-    use crate::{registry::{Registry, RegistryItem}, stuff::*};
+    use crate::{registry::{Registry, RegistryItem}, simulation::*};
 
     
     #[derive(Default)]
@@ -160,6 +160,10 @@ mod item_tests {
     impl Registry for ItemTestRegistry {
         fn registry_item(id: u8) -> &'static RegistryItem {
             &Self::ITEMS[id as usize]
+        }
+        
+        fn registry_recipe(string_id: &str) -> &'static registry::Recipe {
+            todo!()
         }
     }
 

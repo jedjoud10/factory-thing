@@ -5,6 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://b4tn4nt3etsyl" path="res://infinite_generator.tscn" id="3_gyfs4"]
 [ext_resource type="PackedScene" uid="uid://dkmntcasyle63" path="res://wind_generator.tscn" id="4_d5x1h"]
 [ext_resource type="PackedScene" uid="uid://c27tvta2y48dy" path="res://silo.tscn" id="5_8mm7a"]
+[ext_resource type="PackedScene" uid="uid://dv1lgeycs4fd8" path="res://deposit.tscn" id="6_hq1ik"]
+[ext_resource type="PackedScene" uid="uid://ca4t5kgj1g08b" path="res://miner.tscn" id="7_nfk4m"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_o3jxj"]
 
@@ -66,6 +68,7 @@ script/source = "extends Node3D
 [node name="Player" type="CharacterBody3D" parent="." unique_id=715877920]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2576691, 1.4770802, 0)
 script = ExtResource("1_0f027")
+sens = 0.002
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1152703165]
 shape = SubResource("CapsuleShape3D_o3jxj")
@@ -90,7 +93,7 @@ mesh = SubResource("SphereMesh_2c62f")
 shape = SubResource("BoxShape3D_0f027")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D" unique_id=743612401]
-transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 50, 0, 0, 0)
+transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 50, -0.06371093, 9.536743e-07, 0.04485607)
 mesh = SubResource("BoxMesh_0f027")
 surface_material_override/0 = SubResource("StandardMaterial3D_gyfs4")
 
@@ -114,13 +117,20 @@ mesh = SubResource("BoxMesh_gyfs4")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.00347, 0.9999999, 3.143793)
 script = SubResource("GDScript_2c62f")
 
-[node name="Machine2" parent="." unique_id=1421246302 instance=ExtResource("2_2c62f")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.006941, 0.99999976, 7.287586)
+[node name="Machine4" parent="." unique_id=1421246302 instance=ExtResource("2_2c62f")]
+recipe_name_id = "crush_iron_more"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.7837086, 1.0195048, 6.5181007)
+script = SubResource("GDScript_2c62f")
+
+[node name="Machine2" parent="." unique_id=1082328463 instance=ExtResource("2_2c62f")]
+recipe_name_id = "smelt_iron"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.006941, 0.99999976, 11.287586)
 script = SubResource("GDScript_2c62f")
 
 [node name="FactoryManager" type="FactoryManager" parent="." unique_id=1425192706]
 
 [node name="Generator" parent="." unique_id=1435830180 instance=ExtResource("3_gyfs4")]
+load = 1000
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3183837, 1, 2.8420856)
 
 [node name="Generator2" parent="." unique_id=538714736 instance=ExtResource("4_d5x1h")]
@@ -130,14 +140,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5129375, 0.50000095, 14.33
 starting_item_id = 1
 starting_item_count = 16
 starting_item_stacks = 200
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.9759, 1.5, -2.120657)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.165209, 1.500001, -11.577689)
 
 [node name="Silo2" parent="." unique_id=140513466 instance=ExtResource("5_8mm7a")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.075769, 1.4960375, 6.8319845)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.832782, 1.4960375, 16.345543)
 
 [node name="Generator3" parent="." unique_id=2038348520 instance=ExtResource("3_gyfs4")]
 load = 1000
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3183837, 1, -4.157914)
 
-[editable path="Machine"]
-[editable path="Machine2"]
+[node name="Deposit" parent="." unique_id=1243883866 instance=ExtResource("6_hq1ik")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.166068, 0.451079, -8.290388)
+
+[node name="Machine3" parent="." unique_id=560157548 instance=ExtResource("7_nfk4m")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.323284, 1.000001, -3.006433)

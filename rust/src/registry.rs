@@ -4,7 +4,7 @@ use crate::{Item, LoadUnit};
 
 pub trait Registry: Default {
     fn registry_item(id: u8) -> &'static RegistryItem;
-
+    fn registry_recipe(string_id: &str) -> &'static Recipe;
 
     fn stack_size(id: u8) -> u8 {
         Self::registry_item(id).stack_size
@@ -48,6 +48,8 @@ impl DefaultRegistry {
     ];
 
     pub const CRUSH_IRON_RECIPE: Recipe = Recipe {
+        id: "crush_iron",
+        name: "",
         input: &[Item::one(Self::RAW_IRON_1)],
         output: &[Item::one(Self::CRUSHED_IRON)],
         ticks: 16,
@@ -55,6 +57,8 @@ impl DefaultRegistry {
     };
 
     pub const CRUSH_IRON_MORE_RECIPE: Recipe = Recipe {
+        id: "crush_iron_more",
+        name: "",
         input: &[Item::one(Self::CRUSHED_IRON)],
         output: &[Item::one(Self::IRON_DUST)],
         ticks: 16,
@@ -62,16 +66,38 @@ impl DefaultRegistry {
     };
 
     pub const SMELT_IRON_RECIPE: Recipe = Recipe {
+        id: "smelt_iron",
+        name: "",
         input: &[Item::one(Self::IRON_DUST)],
         output: &[Item::one(Self::IRON_INGOT)],
-        ticks: 4,
-        load: 0,
+        ticks: 32,
+        load: 10,
     };
+
+    pub const MINE_IRON_RECIPE: Recipe = Recipe {
+        id: "mine_iron",
+        name: "",
+        input: &[],
+        output: &[Item::one(Self::RAW_IRON_1)],
+        ticks: 4,
+        load: 1,
+    };
+
+    pub const RECIPES: &[&Recipe] = &[
+        &Self::CRUSH_IRON_RECIPE,
+        &Self::CRUSH_IRON_MORE_RECIPE,
+        &Self::SMELT_IRON_RECIPE,
+        &Self::MINE_IRON_RECIPE,        
+    ];
 }
 
 impl Registry for DefaultRegistry {
     fn registry_item(id: u8) -> &'static RegistryItem {
         &Self::ITEMS[id as usize]
+    }
+
+    fn registry_recipe(id: &str) -> &'static Recipe {
+        &Self::RECIPES.iter().find(|x| x.id == id).unwrap()
     }
 }
 
@@ -109,6 +135,8 @@ impl TestRegistry {
     ];
 
     pub const CRUSH_IRON_RECIPE: Recipe = Recipe {
+        id: "crush_iron",
+        name: "",
         input: &[Item::one(Self::RAW_IRON_1)],
         output: &[Item::one(Self::CRUSHED_IRON)],
         ticks: 16,
@@ -116,6 +144,8 @@ impl TestRegistry {
     };
 
     pub const CRUSH_IRON_MORE_RECIPE: Recipe = Recipe {
+        id: "crush_iron_more",
+        name: "",
         input: &[Item::one(Self::CRUSHED_IRON)],
         output: &[Item::one(Self::IRON_DUST)],
         ticks: 16,
@@ -123,6 +153,8 @@ impl TestRegistry {
     };
 
     pub const SMELT_IRON_RECIPE: Recipe = Recipe {
+        id: "smelt_iron",
+        name: "",
         input: &[Item::one(Self::IRON_DUST)],
         output: &[Item::one(Self::IRON_INGOT)],
         ticks: 4,
@@ -133,6 +165,10 @@ impl TestRegistry {
 impl Registry for TestRegistry {
     fn registry_item(id: u8) -> &'static RegistryItem {
         &Self::ITEMS[id as usize]
+    }
+    
+    fn registry_recipe(string_id: &str) -> &'static Recipe {
+        todo!()
     }
 }
 
@@ -145,6 +181,8 @@ pub struct RegistryItem {
 
 #[derive(Debug)]
 pub struct Recipe {
+    pub id: &'static str,
+    pub name: &'static str,
     pub input: &'static [Item],
     pub output: &'static [Item],
     pub ticks: u16,

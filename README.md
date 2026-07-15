@@ -148,6 +148,8 @@ Rubber conveyor belts will only be able to transfer solid items that weight less
 
 Cleat conveyor belts can transfer dusts or grainy materials (crushed / dust / small particulate) 
 
+Conveyor belts will break / get stuck if you put the wrong type of material on them  
+
 ## Computing & Digitalization
 At some point, you will advance in the tech tree enough to be able to afford computers and computer parts.
 For the coolness effect these should be very big (i.e room sized at minimum) because they would be "primitive" computers
@@ -157,6 +159,23 @@ Maybe digital storage could be used in the same way that storage drones work in 
 
 # Thinking
 In the Create Mod, machines are "shapeless". They do their functions on the items below them, in depots or belts. Ex: The `mechanical press`, converts `ingots` into `plates`, but it *also* has other use cases
+
+Instead of having machines that follow "recipes" arbitrarily (`iron ingot` -> `iron plate` in a constructor, for example), what if we had machines that *did one thing and only one thing*. For example:
+- a *presser* that just presses down whatever is underneath it. *depending* on what is underneath it, the recipe changes:
+    - if you press a metal sheet, you get a *thinner* metal sheet
+    - if you press a metal cube, it makes... um... something
+
+# Another idea:
+Instead of having a constructor that does: `rotor` + `bearings` + `coils` + `casing` + = `motor` using a recipe, what if you have to construct the motor piece by piece, one step at a time:
+
+1. Insert coils in casing
+2. Insert rotor bearings in casing
+3. Insert rotor in casing
+4. Put casing front plate
+5. Screw casing front plate
+
+At the end, this is equivalent to crafting the motor in one go, but instead it is spread out over multiple steps *and* you can ship the "intermediate motor" to other parts of the factory.
+For example, if you have a sub-factory that specializes in making casings, it might be more convenient to ship the *intermediate rotor* (the motor in a "still being crafted" state) and complete the crafting recipe there *without* having to bring all the preliminary ingredients with you. The half-crafted motor itself contains those ingredients.
 
 # Test
 
