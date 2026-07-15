@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://c27tvta2y48dy"]
+
+[ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://hatch.tscn" id="2_q65c1"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
+size = Vector3(2, 6, 2)
+
+[node name="Silo" type="SiloNode" unique_id=1271181072 groups=["actors"]]
+
+[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=919800609]
+
+[node name="CSGBox3D" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2129901033]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0.011)
+size = Vector3(2, 6, 2)
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1079998213]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1945520073]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0.002)
+shape = SubResource("BoxShape3D_6a4ke")
+
+[node name="Label3D" type="Label3D" parent="." unique_id=1784675617]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.754977, 1.8173234, 0)
+billboard = 1
+text = "Silo"
+
+[node name="Input Hatch" parent="." unique_id=276232919 instance=ExtResource("2_q65c1")]
+input_hatch = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.1571972)
+
+[node name="Output Hatch" parent="." unique_id=1583920681 instance=ExtResource("2_q65c1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.17957)
+type = 1

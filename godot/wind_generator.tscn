@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://dkmntcasyle63"]
+
+[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://pole.tscn" id="1_8u62v"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
+size = Vector3(3, 20, 3)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_8u62v"]
+top_radius = 1.0
+bottom_radius = 1.5
+height = 20.0
+cap_bottom = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_8u62v"]
+size = Vector3(1, 15, 1)
+
+[node name="Wind Generator" type="GeneratorNode" unique_id=1435830180 groups=["actors"]]
+load = 5
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1079998213]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1945520073]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10.000977, 0.0024414063)
+shape = SubResource("BoxShape3D_6a4ke")
+
+[node name="Power Pole" parent="." unique_id=502923269 instance=ExtResource("1_8u62v")]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 1.8166252, -1.660106)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1115599024]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 0)
+mesh = SubResource("CylinderMesh_8u62v")
+
+[node name="Rotor" type="Node3D" parent="." unique_id=1370942446]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 20, 0)
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="Rotor" unique_id=603638272]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+mesh = SubResource("BoxMesh_8u62v")
+
+[node name="MeshInstance3D3" type="MeshInstance3D" parent="Rotor" unique_id=1464277773]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 2, 0, 0)
+mesh = SubResource("BoxMesh_8u62v")

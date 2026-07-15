@@ -1,0 +1,13 @@
+[package]
+name = "rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+godot = "0.5.3"
+slotmap = "1.1.1"
+vek = "0.17.2"
+
+
+[lib]
+crate-type = ["cdylib"]

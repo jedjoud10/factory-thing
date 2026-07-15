@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://b4tn4nt3etsyl"]
+
+[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://pole.tscn" id="1_r36sx"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
+size = Vector3(1, 1.0019531, 2.0927734)
+
+[node name="Generator" type="GeneratorNode" unique_id=1435830180 groups=["actors"]]
+load = 10
+
+[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=919800609]
+
+[node name="CSGBox3D" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2129901033]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.0107421875)
+size = Vector3(1, 1, 1.9726563)
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1079998213]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1945520073]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0009765625, 0.0024414063)
+shape = SubResource("BoxShape3D_6a4ke")
+
+[node name="Power Pole" parent="." unique_id=502923269 instance=ExtResource("1_r36sx")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.69810146, -0.80794793)
