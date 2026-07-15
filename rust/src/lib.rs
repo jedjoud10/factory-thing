@@ -35,18 +35,34 @@ struct FactoryManager {
     base: Base<Node3D>,
     real_time: f32,
     game: Simulation<DefaultRegistry>,
+    godot_item_models_registry: HashMap<u8, Gd<PackedScene>>,
+    godot_item_materials_registry: HashMap<u8, Gd<Material>>,
+    item_prefab: Gd<PackedScene>,
 }
 
 
 #[godot_api]
 impl INode3D for FactoryManager {
     fn init(base: Base<Node3D>) -> Self {
-
         Self {
             base,
             real_time: 0f32,
             game: Default::default(),
+            godot_item_models_registry: HashMap::default(),
+            godot_item_materials_registry: HashMap::default(),
+            item_prefab: Gd::default()
         }
+    }
+
+    fn enter_tree(&mut self) {
+        for (index, item) in DefaultRegistry::ITEMS.iter().enumerate() {
+            if index != 0 {
+                self.godot_item_models_registry.insert(index as u8, load::<PackedScene>(item.data.item_model_resource));
+                self.godot_item_materials_registry.insert(index as u8, load::<Material>(item.data.item_material_resource));
+            }
+        }
+
+        self.item_prefab = load::<PackedScene>("res://item.tscn");
     }
 
     fn process(&mut self, delta: f32) {
@@ -475,7 +491,6 @@ impl INode3D for BeltNode {
         let tick_interpolation_factor = diff;
         let tick_interpolation_factor = tick_interpolation_factor.clamp(0f32, 1f32);
 
-        let scene = load::<PackedScene>("res://item.tscn");
         let a = self.belt_start_hatch_ref.as_ref().unwrap().bind().base().get_global_position();
         let b = self.belt_end_hatch_ref.as_ref().unwrap().bind().base().get_global_position();
 
@@ -491,10 +506,26 @@ impl INode3D for BeltNode {
             
             
             if !elem.is_invalid() {
-                let instance = scene.instantiate().unwrap();
-                self.base_mut().add_child(&instance);
+                let mut item_node = bound.item_prefab.instantiate().unwrap();
+
+
+                let model_node = bound.godot_item_models_registry[&elem.id].instantiate().unwrap();
+                let material = &bound.godot_item_materials_registry[&elem.id];
                 
-                let mut instance = instance.cast::<Node3D>();
+                
+                for child in model_node.get_children().iter_shared() {
+                    if let Ok(mut mesh_instance) = child.try_cast::<MeshInstance3D>() {
+                        mesh_instance.set_material_override(material);
+                    }
+                }
+
+
+
+                item_node.add_child(&model_node);
+
+                self.base_mut().add_child(&item_node);
+                
+                let mut instance = item_node.cast::<Node3D>();
                 let lerped = Vector3::lerp(a, b, factor);
                 
                 instance.set_global_position(lerped);

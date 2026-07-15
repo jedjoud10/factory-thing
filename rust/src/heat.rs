@@ -163,10 +163,12 @@ fn test2() {
     heat.tick();
     assert!(heat.get_sensors()[0] == 0f32);
 
-    for _ in 0..500 {
+    for _ in 0..50 {
         heat.tick();
         heat.get_sensors();
-        dbg!(heat.get_overall());
+        //dbg!(heat.get_overall());
     }
+
+    assert!(heat.get_sensors()[0] > 0f32);
 
 }

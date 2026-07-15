@@ -125,7 +125,6 @@ fn test() {
     for _ in 0..10 {
         pipe.spawn();
         pipe.tick();
-        dbg!(pipe.volume());
     }
 }
 
@@ -191,8 +190,6 @@ fn test2() {
     
     for _ in 0..10 {
         pipe.tick();
-        dbg!(&pipe.buffer);
-        std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
 
@@ -241,8 +238,6 @@ fn test3() {
         // source
         pipe.particles.push(TmpPart { direction: true, position: 0, alpha: 0 });
         pipe.tick();
-        dbg!(&pipe.particles);
-        dbg!(pipe.volume());
         
         // sink
         pipe.particles.retain(|x| x.position != 8);
@@ -322,7 +317,5 @@ fn test4() {
     for _ in 0..10 {
         pipe.cells[0] = 1;
         pipe.tick();
-        dbg!(&pipe.cells);
-        std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }

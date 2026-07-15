@@ -3,7 +3,9 @@ use std::{collections::HashMap, sync::OnceLock};
 use crate::{Item, LoadUnit};
 
 pub trait Registry: Default {
-    fn registry_item(id: u8) -> &'static RegistryItem;
+    type Data: 'static;
+
+    fn registry_item(id: u8) -> &'static RegistryItem<Self::Data>;
     fn registry_recipe(string_id: &str) -> &'static Recipe;
 
     fn stack_size(id: u8) -> u8 {
@@ -18,32 +20,57 @@ pub trait Registry: Default {
 #[derive(Default)]
 pub struct DefaultRegistry;
 
+pub struct DefaultRegistryItemData {
+    pub item_model_resource: &'static str,
+    pub item_material_resource: &'static str,
+}
+
 impl DefaultRegistry {
     pub const RAW_IRON_1: u8 = 1;
     pub const CRUSHED_IRON: u8 = 2;
     pub const IRON_DUST: u8 = 3;
     pub const IRON_INGOT: u8 = 4;
 
-    pub const ITEMS: &[RegistryItem] = &[
+    pub const ITEMS: &[RegistryItem<DefaultRegistryItemData>] = &[
         RegistryItem {
             name: "invalid",
             stack_size: 0,
+            data: DefaultRegistryItemData {
+                item_model_resource: "",
+                item_material_resource: "",
+            },
         },
         RegistryItem {
             name: "Raw Iron",
             stack_size: 255,
+            data: DefaultRegistryItemData {
+                item_model_resource: "res://models/Ore Mesh A.blend",
+                item_material_resource: "res://materials/raw_ore.tres",
+            },
         },
         RegistryItem {
             name: "Crushed Iron",
             stack_size: 255,
+            data: DefaultRegistryItemData {
+                item_model_resource: "res://models/Dust Mesh A.blend",
+                item_material_resource: "res://materials/crushed_ore.tres",
+            },
         },
         RegistryItem {
             name: "Iron Dust",
             stack_size: 255,
+            data: DefaultRegistryItemData {
+                item_model_resource: "res://models/Dust Mesh B.blend",
+                item_material_resource: "res://materials/crushed_ore.tres",
+            },
         },
         RegistryItem {
             name: "Iron Ingot",
             stack_size: 255,
+            data: DefaultRegistryItemData {
+                item_model_resource: "res://models/Ingot Mesh.blend",
+                item_material_resource: "res://materials/ingot.tres",
+            },
         },
     ];
 
@@ -92,7 +119,9 @@ impl DefaultRegistry {
 }
 
 impl Registry for DefaultRegistry {
-    fn registry_item(id: u8) -> &'static RegistryItem {
+    type Data = DefaultRegistryItemData;
+
+    fn registry_item(id: u8) -> &'static RegistryItem<DefaultRegistryItemData> {
         &Self::ITEMS[id as usize]
     }
 
@@ -111,26 +140,31 @@ impl TestRegistry {
     pub const IRON_DUST: u8 = 3;
     pub const IRON_INGOT: u8 = 4;
 
-    pub const ITEMS: &[RegistryItem] = &[
+    pub const ITEMS: &[RegistryItem<()>] = &[
         RegistryItem {
             name: "invalid",
             stack_size: 0,
+            data: ()
         },
         RegistryItem {
             name: "Raw Iron",
             stack_size: 255,
+            data: ()
         },
         RegistryItem {
             name: "Crushed Iron",
             stack_size: 255,
+            data: ()
         },
         RegistryItem {
             name: "Iron Dust",
             stack_size: 255,
+            data: ()
         },
         RegistryItem {
             name: "Iron Ingot",
             stack_size: 255,
+            data: ()
         },
     ];
 
@@ -163,7 +197,9 @@ impl TestRegistry {
 }
 
 impl Registry for TestRegistry {
-    fn registry_item(id: u8) -> &'static RegistryItem {
+    type Data = ();
+
+    fn registry_item(id: u8) -> &'static RegistryItem<()> {
         &Self::ITEMS[id as usize]
     }
     
@@ -174,9 +210,10 @@ impl Registry for TestRegistry {
 
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct RegistryItem {
+pub struct RegistryItem<Data> {
     pub name: &'static str,
     pub stack_size: u8,
+    pub data: Data,
 }
 
 #[derive(Debug)]

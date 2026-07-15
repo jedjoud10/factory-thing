@@ -137,28 +137,34 @@ mod item_tests {
         pub const ITEM_WITH_STACK_SIZE_16: u8 = 2;
         pub const ITEM_WITH_STACK_SIZE_255: u8 = 3;
 
-        pub const ITEMS: &[RegistryItem] = &[
+        pub const ITEMS: &[RegistryItem<()>] = &[
             RegistryItem {
                 name: "invalid",
                 stack_size: 0,
+                data: ()
             },
             RegistryItem {
                 name: "Item with stack size 1",
                 stack_size: 1,
+                data: ()
             },
             RegistryItem {
                 name: "Item with stack size 16",
                 stack_size: 16,
+                data: ()
             },
             RegistryItem {
                 name: "Iron with stack size 255",
                 stack_size: 255,
+                data: ()
             },
         ];
     }
 
     impl Registry for ItemTestRegistry {
-        fn registry_item(id: u8) -> &'static RegistryItem {
+        type Data = ();
+
+        fn registry_item(id: u8) -> &'static RegistryItem<()> {
             &Self::ITEMS[id as usize]
         }
         

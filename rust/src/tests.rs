@@ -94,6 +94,8 @@ mod power_tests {
     #[test]
     fn overloaded_wire() {
         let mut game = TestGame::default();
+        game.settings.wire_damage_per_tick = Some(1);
+
         let b = game.add_consumer(10);
         let a = game.add_generator(10);
         let wire = game.add_wire_with_max_flow(a, b, 1);
