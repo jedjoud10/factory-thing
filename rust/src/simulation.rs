@@ -140,6 +140,11 @@ pub struct Simulation<R: registry::Registry> {
     pub silos: SlotMap<SiloKey, Silo>,
     pub settings: Settings,
     pub tick: u64,
+
+    // used for testing...
+    pub sources: Vec<(HatchKey, Item)>,
+    pub sinks: Vec<HatchKey>,
+
     pub registry: R
 }
 
@@ -160,11 +165,12 @@ impl<R: registry::Registry> Simulation<R> {
             hatches,
             tick,
             silos,
+            settings,
             ..
         } = self;
 
         // before we reset wire flow, check for max flow and do damage tick
-        if let Some(wire_damage_per_tick) = self.settings.wire_damage_per_tick {
+        if let Some(wire_damage_per_tick) = settings.wire_damage_per_tick {
             for wire in wires.values_mut() {
                 if wire.flow.abs() > wire.max_flow {
                     wire.damage = wire.damage.saturating_add(wire_damage_per_tick);
@@ -317,6 +323,18 @@ impl<R: registry::Registry> Simulation<R> {
                     }
                 }
             }
+        }
+
+        // update debug sources
+        for (source, item) in self.sources.iter() {
+            let hatch = &mut hatches[*source];
+            hatch.buffer = *item;            
+        }
+
+        // update debug sinks
+        for sink in self.sinks.iter() {
+            let hatch = &mut hatches[*sink];
+            hatch.buffer.invalidate();
         }
 
         for machine in machines.values_mut() {
@@ -583,16 +601,15 @@ impl<R: registry::Registry> Simulation<R> {
 }
 
 impl<R: registry::Registry> Simulation<R> {
-    pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey) -> MachineKey {
+    pub fn add_machine_with_pole(&mut self, recipe: &'static Recipe, pole_key: PoleKey, input_hatches: u32, output_hatches: u32) -> MachineKey {
         self.poles[pole_key] = Pole::Consumer { target_load: 0, current_load: 0 };
 
-        // TODO: scale number of hatches with required recipe I/O
-        let input = self.hatches.insert(Hatch::empty());
-        let output = self.hatches.insert(Hatch::empty());
+        let input = (0..input_hatches).map(|_| self.hatches.insert(Hatch::empty())).collect::<Vec<_>>();
+        let output = (0..output_hatches).map(|_| self.hatches.insert(Hatch::empty())).collect::<Vec<_>>();
         
         let machine = Machine {
-            input: vec![input],
-            output: vec![output],
+            input,
+            output,
             recipe: Some(&recipe),
             progress: None,
             pole: Some(pole_key),
@@ -721,17 +738,6 @@ impl<R: registry::Registry> Simulation<R> {
         }).collect::<Vec<WireKey>>()
     }
 
-    pub fn add_belt(&mut self, output_hatch: HatchKey, input_hatch: HatchKey) -> BeltKey {
-        assert!(output_hatch != input_hatch);
-
-        self.belts.insert(Belt {
-            belt_start: output_hatch,
-            belt_end: input_hatch,
-            buffer: vec![Item::invalid(); 8],
-            last_transfer_tick: 0,
-        })
-    }
-
     pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, length: BeltSize) -> BeltKey {
         assert!(output_hatch != input_hatch);
 
@@ -759,5 +765,25 @@ impl<R: registry::Registry> Simulation<R> {
 
     pub fn get_output_hatch_mut(&mut self, machine_id: MachineKey, hatch_index: usize) -> &mut Item {
         &mut self.hatches[self.machines[machine_id].output[hatch_index]].buffer
+    }
+
+    pub fn add_source(&mut self, source_item: Item) -> HatchKey {
+        let key = self.hatches.insert(Hatch {
+            buffer: source_item,
+        });
+
+        self.sources.push((key, source_item));
+
+        key
+    }
+
+    pub fn add_sink(&mut self) -> HatchKey {
+        let key = self.hatches.insert(Hatch {
+            buffer: Item::invalid(),
+        });
+
+        self.sinks.push(key);
+
+        key
     }
 }

@@ -130,6 +130,12 @@ struct MachineNode {
 
     #[export]
     recipe_name_id: godot::builtin::GString,
+
+    #[export]
+    input_hatch_count: u32,
+
+    #[export]
+    output_hatch_count: u32,
 }
 
 #[godot_api]
@@ -140,6 +146,8 @@ impl INode3D for MachineNode {
             key: MachineKey::null(),
             pole_key: PoleKey::null(),
             recipe_name_id: godot::builtin::GString::default(),
+            input_hatch_count: 0,
+            output_hatch_count: 0,
         }
     }
 
@@ -158,9 +166,7 @@ impl INode3D for MachineNode {
         let id = self.recipe_name_id.to_string();
         let x = DefaultRegistry::registry_recipe(&id);
         
-        self.key = bound.game.add_machine_with_pole(&x, pole.key);
-
-        // *bound.game.get_input_hatch_mut(self.key, 0) = Item { id: DefaultRegistry::RAW_IRON_1, count: 8 };
+        self.key = bound.game.add_machine_with_pole(&x, pole.key, self.input_hatch_count, self.output_hatch_count);
 
         for child in self.base().get_children().iter_shared() {
             if let Ok(mut hatch_node) = child.try_cast::<HatchNode>() {
@@ -185,11 +191,12 @@ impl INode3D for MachineNode {
 
         let mut label = self.base().get_node_as::<Label3D>("Label3D");
         let status = &bound.game.machines[self.key].status;
-        let progress = &bound.game.machines[self.key].progress;
-        // let output_hatch = &bound.game.machines[self.key].output[0].buffer;
+        let progress: &Option<Progress> = &bound.game.machines[self.key].progress;
+
+        let mut child = self.base().find_child("Smoke Vfx").unwrap().cast::<GpuParticles3D>();
+        child.set_emitting(progress.as_ref().map(|x| x.slow_down_ticks_remaining.is_none()).unwrap_or_default());
         
-        //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
-        //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
+        label.set_text(&format!("{:?}", progress));
     }
 
     fn exit_tree(&mut self) {

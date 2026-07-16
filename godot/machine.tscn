@@ -2,12 +2,18 @@
 
 [ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://pole.tscn" id="2_13m1l"]
 [ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://hatch.tscn" id="2_q015e"]
+[ext_resource type="Material" uid="uid://dba8ytmipfsl2" path="res://vfx/smoke_particle_material.tres" id="3_loq51"]
+[ext_resource type="Material" uid="uid://ba6hdaqeva4dr" path="res://vfx/smoke_particle_process_material.tres" id="3_q015e"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
 size = Vector3(1, 1.0019531, 2.0927734)
 
+[sub_resource type="BoxMesh" id="BoxMesh_q015e"]
+
 [node name="Machine" type="MachineNode" unique_id=1421246302 groups=["actors"]]
 recipe_name_id = "crush_iron"
+input_hatch_count = 1
+output_hatch_count = 1
 
 [node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=919800609]
 
@@ -36,3 +42,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.1571972)
 [node name="Output Hatch" parent="." unique_id=1583920681 instance=ExtResource("2_q015e")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.17957)
 type = 1
+
+[node name="Smoke Vfx" type="GPUParticles3D" parent="." unique_id=1143982262]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.038622, 0)
+material_override = ExtResource("3_loq51")
+emitting = false
+amount = 32
+fixed_fps = 60
+process_material = ExtResource("3_q015e")
+draw_pass_1 = SubResource("BoxMesh_q015e")
