@@ -127,11 +127,11 @@ func _input(event):
 	elif event is InputEventMouseMotion:
 		accumulated_mouse += event.relative * sens
 		
-var machine_scene = preload("res://machine.tscn")
-var power_pole_scene = preload("res://pole.tscn")
-var silo_scene = preload("res://silo.tscn")
-var wire_scene = preload("res://wire.tscn")
-var belt_scene = preload("res://belt.tscn")
+var machine_scene = preload("res://actors/machine.tscn")
+var power_pole_scene = preload("res://actors/pole.tscn")
+var silo_scene = preload("res://actors/silo.tscn")
+var wire_scene = preload("res://actors/wire.tscn")
+var belt_scene = preload("res://actors/belt.tscn")
 
 
 		

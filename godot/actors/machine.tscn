@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://tutiyjxgw5nq"]
 
-[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://pole.tscn" id="2_13m1l"]
-[ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://hatch.tscn" id="2_q015e"]
+[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://actors/pole.tscn" id="2_13m1l"]
+[ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://actors/hatch.tscn" id="2_q015e"]
 [ext_resource type="Material" uid="uid://dba8ytmipfsl2" path="res://vfx/smoke_particle_material.tres" id="3_loq51"]
 [ext_resource type="Material" uid="uid://ba6hdaqeva4dr" path="res://vfx/smoke_particle_process_material.tres" id="3_q015e"]
 

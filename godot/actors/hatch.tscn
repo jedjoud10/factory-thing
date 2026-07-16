@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cdqcnjqngif53"]
 
-[ext_resource type="Script" uid="uid://d0ywp5mx11pif" path="res://hatch.gd" id="1_ybbri"]
+[ext_resource type="Script" uid="uid://d0ywp5mx11pif" path="res://actors/hatch.gd" id="1_ybbri"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ybbri"]
 

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://ca4t5kgj1g08b"]
 
-[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://pole.tscn" id="1_qsadh"]
-[ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://hatch.tscn" id="2_u7vtn"]
+[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://actors/pole.tscn" id="1_qsadh"]
+[ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://actors/hatch.tscn" id="2_u7vtn"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
 size = Vector3(1, 1.0019531, 2.0927734)

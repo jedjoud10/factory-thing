@@ -62,7 +62,7 @@ impl INode3D for FactoryManager {
             }
         }
 
-        self.item_prefab = load::<PackedScene>("res://item.tscn");
+        self.item_prefab = load::<PackedScene>("res://actors/item.tscn");
     }
 
     fn process(&mut self, delta: f32) {
