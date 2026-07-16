@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use godot::prelude::*;
 use godot::classes::*;
@@ -119,7 +120,14 @@ impl INode3D for PoleNode {
 }
 
 #[godot_api]
-impl PoleNode {}
+impl PoleNode {
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let text = format!("id: {:?}", self.key);
+
+        GString::from_str(&text).unwrap()
+    }
+}
 
 #[derive(GodotClass)]
 #[class(base=Node3D)]
@@ -207,6 +215,49 @@ impl INode3D for MachineNode {
         let mut bound = factory_manager.bind_mut();
 
         bound.game.remove_machine(self.key);
+    }
+}
+
+#[godot_api]
+impl MachineNode {
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let machine = &bound.game.machines[self.key];
+        let recipe = machine.recipe.unwrap();
+        
+        let string = format!("machine. recipe: '{}'", recipe.id);
+        
+        GString::from_str(&string).unwrap()
+    }
+
+    #[func]
+    fn get_ui_progress_bar_percentage(&mut self) -> f32 {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let machine = &bound.game.machines[self.key];
+        let recipe = machine.recipe.unwrap();
+
+        let progress = match &machine.progress {
+            Some(progress) => {
+                let remaining = progress.ticks_remaining.get();
+                let total = recipe.ticks;
+                let current = (total - remaining) as f32;
+                let factor = current / total as f32;
+
+                100f32 * factor
+            },
+            None => 0f32,
+        };
+
+        progress
     }
 }
 
@@ -380,6 +431,37 @@ impl INode3D for SiloNode {
     }
 }
 
+#[godot_api]
+impl SiloNode {
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+
+        let silo = &bound.game.silos[self.key];
+
+
+        let mut total = HashMap::<u8, u32>::new();
+
+        for stack in silo.stack.iter() {
+            *total.entry(stack.id).or_default() += stack.count as u32;
+        }
+
+        let mut str = String::new();
+        for (id, count) in total {
+            let name = DefaultRegistry::name(id);
+            str += &format!("{name}x{count},");
+        }
+
+
+        GString::from_str(&str).unwrap()
+    }
+}
+
+
 
 #[derive(GodotClass)]
 #[class(base=Node3D)]
@@ -422,7 +504,21 @@ impl INode3D for HatchNode {
 }
 
 #[godot_api]
-impl HatchNode {}
+impl HatchNode {
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let item = bound.game.hatches[self.key].buffer;
+        let item_text = item.display::<DefaultRegistry>();
+        let text = format!("id: {:?}. {}", self.key, item_text);
+
+        GString::from_str(&text).unwrap()
+    }
+}
 
 #[derive(GodotClass)]
 #[class(base=Node3D)]
@@ -557,6 +653,22 @@ impl BeltNode {
     fn hatch_destroyed(&mut self) {
         self.base_mut().queue_free();
     }
+
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+
+        let belt = &bound.game.belts[self.key];
+        let last_transfer_tick = belt.last_transfer_tick;
+
+        let text = format!("id: {:?}, LTT: {}, buf-len: {}", self.key, last_transfer_tick, belt.buffer.len());
+
+        GString::from_str(&text).unwrap()
+    }
 }
 
 
@@ -653,5 +765,18 @@ impl INode3D for WireNode {
 impl WireNode {
     fn pole_destroyed(&mut self) {
         self.base_mut().queue_free();
+    }
+
+    #[func]
+    fn get_ui_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let wire = &bound.game.wires[self.key];
+        let text = format!("a: {:?}, b: {:?}, flow: {}", wire.a, wire.b, wire.flow);
+        
+        GString::from_str(&text).unwrap()
     }
 }

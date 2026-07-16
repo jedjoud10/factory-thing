@@ -44,8 +44,9 @@ func _physics_process(delta: float) -> void:
 	
 
 func _process(delta: float) -> void:
-	var x = clamp(-accumulated_mouse.y, -PI * 0.5, PI * 0.5)
-	var y = -accumulated_mouse.x;
+	accumulated_mouse.y = clamp(accumulated_mouse.y, -PI * 0.5, PI * 0.5)
+	var x = -accumulated_mouse.y
+	var y = -accumulated_mouse.x
 	
 	camera.rotation = Vector3(x, 0, 0)
 	

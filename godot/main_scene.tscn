@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://tutiyjxgw5nq" path="res://actors/machine.tscn" id="2_2c62f"]
 [ext_resource type="PackedScene" uid="uid://b4tn4nt3etsyl" path="res://actors/infinite_generator.tscn" id="3_gyfs4"]
 [ext_resource type="PackedScene" uid="uid://c27tvta2y48dy" path="res://actors/silo.tscn" id="5_8mm7a"]
+[ext_resource type="PackedScene" uid="uid://dkqbw22vbh5ys" path="res://ui/user_interface.tscn" id="5_hq1ik"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_o3jxj"]
 
@@ -146,3 +147,5 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.832782, 1.4960375, 16.34554
 [node name="Generator3" parent="." unique_id=2038348520 instance=ExtResource("3_gyfs4")]
 load = 1000
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3183837, 1, -4.157914)
+
+[node name="User Interface" parent="." unique_id=930908332 instance=ExtResource("5_hq1ik")]

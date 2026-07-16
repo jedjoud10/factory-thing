@@ -1,0 +1,68 @@
+[gd_scene format=3 uid="uid://dkqbw22vbh5ys"]
+
+[ext_resource type="Script" uid="uid://esd4oaqmlt80" path="res://ui/user_interface.gd" id="1_mm06q"]
+
+[node name="User Interface" type="Control" unique_id=930908332]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_mm06q")
+
+[node name="PanelContainer" type="PanelContainer" parent="." unique_id=941400853]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_right = 200.0
+offset_bottom = 50.0
+grow_horizontal = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer" unique_id=1838461732]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PanelContainer/VBoxContainer" unique_id=2117675599]
+layout_mode = 2
+text = "Machine"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ProgressBar" type="ProgressBar" parent="PanelContainer/VBoxContainer" unique_id=774894233]
+layout_mode = 2
+
+[node name="Selected Actor Color Rect" type="ColorRect" parent="." unique_id=457420005]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -50.0
+offset_right = 256.0
+offset_bottom = -2.0
+grow_vertical = 0
+color = Color(0.13682577, 0.13682574, 0.13682571, 1)
+
+[node name="Label" type="Label" parent="Selected Actor Color Rect" unique_id=1308735162]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Selected Actor:"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label2" type="Label" parent="Selected Actor Color Rect" unique_id=936238792]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_alignment = 1
+vertical_alignment = 1
