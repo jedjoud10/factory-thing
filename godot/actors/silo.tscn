@@ -19,11 +19,6 @@ size = Vector3(2, 6, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0.002)
 shape = SubResource("BoxShape3D_6a4ke")
 
-[node name="Label3D" type="Label3D" parent="." unique_id=1784675617]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.754977, 1.8173234, 0)
-billboard = 1
-text = "Silo"
-
 [node name="Input Hatch" parent="." unique_id=276232919 instance=ExtResource("2_q65c1")]
 input_hatch = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.1571972)

@@ -1,5 +1,7 @@
 [gd_scene format=3 uid="uid://dtofdrgmekel"]
 
+[ext_resource type="Material" uid="uid://dvyg4qib57urk" path="res://materials/belt.tres" id="1_pt0t2"]
+
 [sub_resource type="BoxMesh" id="BoxMesh_susb0"]
 size = Vector3(1, 0.2, 2)
 
@@ -11,6 +13,7 @@ size = Vector3(1, 0.2, 1)
 [node name="Belt Visual" type="Node3D" parent="." unique_id=2000455407]
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Belt Visual" unique_id=157024540]
+material_override = ExtResource("1_pt0t2")
 mesh = SubResource("BoxMesh_susb0")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1212345998]

@@ -5,12 +5,16 @@ extends CharacterBody3D
 @export var jump_velocity = 4.5
 @export var push_force = 0.2
 
+@export var hover_force = 2000
+@export var hover_forward_factor = 3
+
 @onready var camera = $"Camera3D"
 @onready var raycaster = $"Camera3D/RayCast3D"
 @onready var indicator = $"Select Indicator"
 
 
 var accumulated_mouse = Vector2.ZERO
+var rigidbody_hover_target: RigidBody3D = null
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -41,6 +45,25 @@ func _physics_process(delta: float) -> void:
 		var c = get_slide_collision(i)
 		if c.get_collider() is RigidBody3D:
 			c.get_collider().apply_central_impulse(-c.get_normal() * push_force)
+			
+	if (Input.is_action_just_pressed("do_hover_thing")):
+		if (raycaster.is_colliding()):
+			var node = raycaster.get_collider()
+			
+			if (rigidbody_hover_target != null):
+				rigidbody_hover_target = null
+			elif (node is RigidBody3D):
+				rigidbody_hover_target = node
+				rigidbody_hover_target.freeze = false
+		else:
+			rigidbody_hover_target = null
+		
+	if (rigidbody_hover_target != null):
+		var target_position = camera.global_position - camera.global_basis.z * hover_forward_factor
+		var current_position = rigidbody_hover_target.global_position
+		var force = (target_position - current_position) * delta * hover_force
+		force += -rigidbody_hover_target.linear_velocity * delta * 200
+		rigidbody_hover_target.apply_force(force)
 	
 
 func _process(delta: float) -> void:
@@ -60,6 +83,7 @@ func _process(delta: float) -> void:
 	else:
 		indicator.show()
 		indicator.global_position = raycaster.get_collision_point()
+		
 	
 	pass
 

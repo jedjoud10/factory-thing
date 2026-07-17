@@ -722,6 +722,7 @@ impl<R: registry::Registry> Simulation<R> {
         })
     }
 
+    // TODO: add wire tiers
     pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
         assert!(a != b);
 
@@ -738,6 +739,7 @@ impl<R: registry::Registry> Simulation<R> {
         }).collect::<Vec<WireKey>>()
     }
 
+    // TODO: add belt tiers
     pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, length: BeltSize) -> BeltKey {
         assert!(output_hatch != input_hatch);
 

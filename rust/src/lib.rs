@@ -191,20 +191,6 @@ impl INode3D for MachineNode {
     }
 
     fn process(&mut self, _delta: f32) {
-        let tree = self.base().get_tree();
-        let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
-        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let mut bound = factory_manager.bind_mut();
-
-        let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        let status = &bound.game.machines[self.key].status;
-        let progress: &Option<Progress> = &bound.game.machines[self.key].progress;
-
-        let mut child = self.base().find_child("Smoke Vfx").unwrap().cast::<GpuParticles3D>();
-        child.set_emitting(progress.as_ref().map(|x| x.slow_down_ticks_remaining.is_none()).unwrap_or_default());
-        
-        label.set_text(&format!("{:?}", progress));
     }
 
     fn exit_tree(&mut self) {
@@ -258,6 +244,21 @@ impl MachineNode {
         };
 
         progress
+    }
+
+    #[func]
+    fn get_ui_recipe_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let machine = &bound.game.machines[self.key];
+        let recipe = machine.recipe.unwrap();
+
+        let string = format!("{} + {} EU/t => {} ({}t)", recipe.input[0].display::<DefaultRegistry>(), recipe.load, recipe.output[0].display::<DefaultRegistry>(), recipe.ticks);
+        
+        GString::from_str(&string).unwrap()
     }
 }
 
@@ -317,19 +318,6 @@ impl INode3D for MinerNode {
     }
 
     fn process(&mut self, _delta: f32) {
-        let tree = self.base().get_tree();
-        let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
-        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let mut bound = factory_manager.bind_mut();
-
-        let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        let status = &bound.game.machines[self.key].status;
-        let progress = &bound.game.machines[self.key].progress;
-        // let output_hatch = &bound.game.machines[self.key].output[0].buffer;
-        
-        //label.set_text(&format!("{:?} {:?} {:?}", status, progress, output_hatch));
-        //label.set_text(&format!("{:?}", bound.game.poles[self.pole_key]));
     }
 
     fn exit_tree(&mut self) {
@@ -398,26 +386,6 @@ impl INode3D for SiloNode {
     }
 
     fn process(&mut self, _delta: f32) {
-        let tree = self.base().get_tree();
-        let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
-        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let bound = factory_manager.bind();
-
-        let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        let silo = &bound.game.silos[self.key];
-        let mut total = HashMap::<u8, u32>::new();
-
-        for stack in silo.stack.iter() {
-            *total.entry(stack.id).or_default() += stack.count as u32;
-        }
-
-        let mut str = String::new();
-        for (id, count) in total {
-            let name = DefaultRegistry::name(id);
-            str += &format!("{name} x {count}\n");
-        }
-        label.set_text(&str);
     }
 
     fn exit_tree(&mut self) {
@@ -490,16 +458,6 @@ impl INode3D for HatchNode {
 
     
     fn process(&mut self, _delta: f32) {
-        let tree = self.base().get_tree();
-        let window = tree.get_root().unwrap();
-        let root = window.get_child(0).unwrap();
-        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
-        let bound = factory_manager.bind();
-
-        let mut label = self.base().get_node_as::<Label3D>("Label3D");
-        let item = bound.game.hatches[self.key].buffer;
-        
-        label.set_text(&item.display::<DefaultRegistry>());
     }
 }
 

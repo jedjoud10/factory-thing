@@ -27,11 +27,6 @@ size = Vector3(1, 1, 1.9726563)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0009765625, 0.0024414063)
 shape = SubResource("BoxShape3D_6a4ke")
 
-[node name="Label3D" type="Label3D" parent="." unique_id=1784675617]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8173234, 0)
-billboard = 1
-text = "Machine"
-
 [node name="Power Pole" parent="." unique_id=502923269 instance=ExtResource("2_13m1l")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.69810146, -0.80794793)
 
