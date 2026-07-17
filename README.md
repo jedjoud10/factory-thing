@@ -33,7 +33,7 @@ Since this will be a 3D game, wires will have a world-scale length. Resistance o
 Instead of using BFS we can use Dijkstra or A* for electrical path-finding, we can set the "weight" of every edge to its resistance. Of course, higher-tier wires will have lower resistance. 
 
 # Ideas
-## Multiblock Like Progression
+## Multiblocks / Modular Components
 ### Building
 To create machines, instead of crafting them in a table (like in Minecraft & GregTech) or placing it down immediately like in Satisfactory, you need to craft the individual components and place them in specific spots in the world.
 For example, to create a "furnace" you could do the following:
@@ -157,7 +157,7 @@ For the coolness effect these should be very big (i.e room sized at minimum) bec
 Something something system similar to AE2 where you can "digitalize" your storage. No auto-crafting though as that's already implemented by, well, the factory.
 Maybe digital storage could be used in the same way that storage drones work in Factorio? (i.e only used to move items in / out of a shared place without needing to resort to belts)
 
-# Thinking
+## Thinking
 In the Create Mod, machines are "shapeless". They do their functions on the items below them, in depots or belts. Ex: The `mechanical press`, converts `ingots` into `plates`, but it *also* has other use cases
 
 Instead of having machines that follow "recipes" arbitrarily (`iron ingot` -> `iron plate` in a constructor, for example), what if we had machines that *did one thing and only one thing*. For example:
@@ -165,7 +165,7 @@ Instead of having machines that follow "recipes" arbitrarily (`iron ingot` -> `i
     - if you press a metal sheet, you get a *thinner* metal sheet
     - if you press a metal cube, it makes... um... something
 
-# Another idea:
+## Another idea:
 Instead of having a constructor that does: `rotor` + `bearings` + `coils` + `casing` + = `motor` using a recipe, what if you have to construct the motor piece by piece, one step at a time:
 
 1. Insert coils in casing
@@ -177,33 +177,30 @@ Instead of having a constructor that does: `rotor` + `bearings` + `coils` + `cas
 At the end, this is equivalent to crafting the motor in one go, but instead it is spread out over multiple steps *and* you can ship the "intermediate motor" to other parts of the factory.
 For example, if you have a sub-factory that specializes in making casings, it might be more convenient to ship the *intermediate rotor* (the motor in a "still being crafted" state) and complete the crafting recipe there *without* having to bring all the preliminary ingredients with you. The half-crafted motor itself contains those ingredients.
 
-# Test
+## Mining Depth Idea:
+Instead of plopping down a miner on top of a resource deposit node and it continuously generates resources, you could make it *simulate* mining down through the soil and through different types of rocks / sediments / ores.
+You can change the target depth of the miner and it will drill until it reaches that depth. You can also use some sort of surface scanning (like scanner in GregTech) to see where the ores are (though much less OP and a lot less accurate than that)
+When mining, you will need to feed the drill with more shafts so that it keeps extending until the target depth.
+When it reaches the target depth then it will start mining for real (whatever that fucking means lol) and require more power and give more throughput. During this time though the unwanted soil that had been mined beforehand must be discarded (=> this gives the option for the player to go and process it some more if they wanted to).
 
-A: Iron Ore
-B: Crushed Iron Ore x 1 (big chunky)
-C: Crushed Iron Ore x 2 (chunky)
-D: Crushed Iron Ore x 3 (small chunky)
-E: Crushed Iron Ore x 4 (very small chunky)
-F: Molten Iron + Byproducts
-G: Molten Iron
-H: Byproducts "Other Things In Molten Iron Depending on Src Ore Idk"
+Example of what this type of mining could give you depending on depth:
+- 0m - 200m : idk dirt and rock
+- 200m - 300m: idk harder rock
+- 300m - 350m: idk
+- 450m - 400m: shit you're looking for
+(I haven't looked into geology and I'm not really trying to make this **realistic** butttt something like Astroneer type rock hardness could be very very cool)
 
+Qs:
+- What if you had to continuously craft more "shafts" and feed it to the miner?
+- What if the miner took more than just power? What about pressurized air? 
+- Would the resource patches run out eventually? 
 
-
-A -> B 100%
-B -> C 100%
-C -> D 100%
-D -> E 100%
-
-B -> F 10%
-C -> F 15%
-D -> F 20%
-E -> F 25%
-
-F -> G,H 100%
+### Extension if using Multiblocks / Modular Components:
+The drill head could be a modular component that can be replaced after enough wear. There can be multiple tiers depending on their hardness and maximum depth they can sustain
 
 
-G + [Reusable, One Time Use] Ingot Cast -> Iron Ingot
+## Satellite Scanning Idea
+*(heavily and I mean HEAVILY inspired from the Advanced Rocketry minecraft mod)*
 
-Resource Values:
-Temperature
+you um make rockets. ksp style. but like in first person. and you actually have to craft the rocket components yourself. you make satellites. launch satellites. they do surface scanning. tell you where good ore is. or maybe makes the map more discoverable.
+oooo what if there are different types of scanners you can put on satellites??

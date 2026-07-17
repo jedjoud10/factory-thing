@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://cdqcnjqngif53" path="res://actors/hatch.tscn" id="2_q015e"]
 [ext_resource type="Material" uid="uid://dba8ytmipfsl2" path="res://vfx/smoke_particle_material.tres" id="3_loq51"]
 [ext_resource type="Material" uid="uid://ba6hdaqeva4dr" path="res://vfx/smoke_particle_process_material.tres" id="3_q015e"]
+[ext_resource type="PackedScene" uid="uid://bmw183igi0msw" path="res://prefabs/clicky_clicky_thing.tscn" id="5_tdvxq"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_6a4ke"]
 size = Vector3(1, 1.0019531, 2.0927734)
@@ -46,3 +47,6 @@ amount = 32
 fixed_fps = 60
 process_material = ExtResource("3_q015e")
 draw_pass_1 = SubResource("BoxMesh_q015e")
+
+[node name="Clicky Clicky Thing" parent="." unique_id=1774589842 instance=ExtResource("5_tdvxq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.1830778, 0, 0)

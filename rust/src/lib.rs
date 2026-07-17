@@ -45,10 +45,14 @@ struct FactoryManager {
 #[godot_api]
 impl INode3D for FactoryManager {
     fn init(base: Base<Node3D>) -> Self {
+        // FIXME: remove this by adding separate const settings for test cases and default cases 
+        let mut sim =  Simulation::<DefaultRegistry>::default();
+        sim.settings.machine_require_clicky_thing_attached = true;
+
         Self {
             base,
             real_time: 0f32,
-            game: Default::default(),
+            game: sim,
             godot_item_models_registry: HashMap::default(),
             godot_item_materials_registry: HashMap::default(),
             item_prefab: Gd::default()
@@ -259,6 +263,30 @@ impl MachineNode {
         let string = format!("{} + {} EU/t => {} ({}t)", recipe.input[0].display::<DefaultRegistry>(), recipe.load, recipe.output[0].display::<DefaultRegistry>(), recipe.ticks);
         
         GString::from_str(&string).unwrap()
+    }
+
+    
+    #[func]
+    fn attach_clicky_thing(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+        let machine = &mut bound.game.machines[self.key];
+        machine.clicky_thing_attached = true;
+    }
+
+        
+    #[func]
+    fn dettach_clicky_thing(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+        let machine = &mut bound.game.machines[self.key];
+        machine.clicky_thing_attached = false;
     }
 }
 

@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://cgeue606n6k8p"]
+
+[ext_resource type="Script" uid="uid://briibcd0g0qni" path="res://prefabs/modular_component.gd" id="1_3alco"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_2c62f"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_gyfs4"]
+
+[node name="Modular Component" type="RigidBody3D" unique_id=461855156]
+mass = 0.2
+script = ExtResource("1_3alco")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=521958836]
+shape = SubResource("BoxShape3D_2c62f")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=192365681]
+mesh = SubResource("BoxMesh_gyfs4")

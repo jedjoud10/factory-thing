@@ -74,6 +74,7 @@ pub struct Machine {
     pub progress: Option<Progress>,
     pub status: MachineStatus,
     pub pole: Option<PoleKey>,
+    pub clicky_thing_attached: bool,
 }
 
 #[derive(Debug)]
@@ -116,6 +117,7 @@ pub struct Settings {
     pub belt_ticks_between_transfers: u64,
     pub belt_transfer_size: u8,
     pub silo_transfer_size: u8,
+    pub machine_require_clicky_thing_attached: bool,
 }
 
 impl Default for Settings {
@@ -126,6 +128,7 @@ impl Default for Settings {
             belt_ticks_between_transfers: 16,
             belt_transfer_size: 1,
             silo_transfer_size: 1,
+            machine_require_clicky_thing_attached: false,
         }
     }
 }
@@ -403,8 +406,15 @@ impl<R: registry::Registry> Simulation<R> {
                             machine.progress = Some(previous_progress);
                         } else {
                             // godot::global::godot_print!("new progress");
-                            let _ = machine.progress.insert(Progress {
-                                ticks_remaining: NonZeroU16::new(recipe.ticks)
+
+                            let ticks = if machine.clicky_thing_attached {
+                                recipe.ticks / 2
+                            } else {
+                                recipe.ticks
+                            };
+
+                            machine.progress.replace(Progress {
+                                ticks_remaining: NonZeroU16::new(ticks)
                                     .expect("recipe ticks must not be zero"),
                                 slow_down_ticks_remaining: None,
                             });
