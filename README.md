@@ -32,6 +32,12 @@ Wires take per-tick damage if they go over their rated maximum load (TODO).
 Since this will be a 3D game, wires will have a world-scale length. Resistance of the wire will scale proportionally with its length. 
 Instead of using BFS we can use Dijkstra or A* for electrical path-finding, we can set the "weight" of every edge to its resistance. Of course, higher-tier wires will have lower resistance. 
 
+### Voltage Tier Idea:
+Machines can have different supported "power tiers". If you have a high-power network and connect it to a lower-power machine, it can cause the machine to blow up. You must use step up / step down converters / transformers that convert between the different power tiers. Evidently, you cannot connect a low-power network to a high power machine. It will simply not work. Basically, do it like how GregTech does it. 
+
+- High power networks have lower losses due to resistance over distance. Can incentivize player to built long powerlines using higher power components
+- Can do something about power distribution stations that step down power and do some other thing alongside that
+
 # Ideas
 ## Multiblocks / Modular Components
 ### Building

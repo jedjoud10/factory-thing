@@ -133,7 +133,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.165209, 1.500001, -11.5776
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.832782, 1.4960375, 16.345543)
 
 [node name="Generator3" parent="." unique_id=2038348520 instance=ExtResource("3_gyfs4")]
-load = 1000
+load = 1
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.3183837, 1, -4.157914)
 
 [node name="User Interface" parent="." unique_id=930908332 instance=ExtResource("5_hq1ik")]

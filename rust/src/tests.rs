@@ -4,11 +4,10 @@ mod power_tests {
     use crate::*;
 
     type TestGame = Simulation<TestRegistry>;
-    
 
     #[test]
     fn simple_power() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let a = game.add_generator(10);
         let b = game.add_consumer(10);
         let wire = game.add_wire(a, b);
@@ -34,7 +33,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_inv() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let a = game.add_generator(10);
         let b = game.add_consumer(10);
         let wire = game.add_wire(b, a);
@@ -59,7 +58,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_inv_2() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let b = game.add_consumer(10);
         let a = game.add_generator(10);
         let wire = game.add_wire(a, b);
@@ -84,7 +83,7 @@ mod power_tests {
 
     #[test]
     fn poles_not_connected() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let _ = game.add_consumer(10);
         let _ = game.add_generator(10);
         game.tick();
@@ -92,7 +91,7 @@ mod power_tests {
 
     #[test]
     fn overloaded_wire() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         game.settings.wire_damage_per_tick = Some(1);
 
         let b = game.add_consumer(10);
@@ -146,7 +145,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_split_load_equally() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let a = game.add_generator(10);
         let b = game.add_consumer(5);
         let c = game.add_consumer(5);
@@ -183,7 +182,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_split_load_inequally() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         let a = game.add_generator(10);
         let b = game.add_consumer(7);
         let c = game.add_consumer(3);
@@ -219,7 +218,7 @@ mod power_tests {
 
     #[test]
     fn simple_power_chain() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
 
         let mut poles = vec![];
         poles.push(Pole::Generator {
@@ -337,7 +336,7 @@ mod sink_source_tests {
 
     #[test]
     fn test_belt_1() {
-        let mut sim = TestGame::default();
+        let mut sim = TestGame::testing();
         sim.settings.belt_ticks_between_transfers = 0;
         sim.settings.belt_transfer_size = 255;
 
@@ -373,12 +372,12 @@ mod tests {
     
     #[test]
     fn empty() {
-        TestGame::default().tick();
+        TestGame::testing().tick();
     }
 
     #[test]
     fn simple_machine_power() {
-        let mut game = TestGame::default();
+        let mut game = TestGame::testing();
         
         let generator_pole = game.add_generator(10);
         let (machine, machine_pole) = game.add_machine(&TestRegistry::CRUSH_IRON_RECIPE);

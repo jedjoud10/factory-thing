@@ -2,6 +2,11 @@
 
 [ext_resource type="Script" uid="uid://esd4oaqmlt80" path="res://ui/user_interface.gd" id="1_mm06q"]
 
+[sub_resource type="LabelSettings" id="LabelSettings_mm06q"]
+font_size = 10
+outline_size = 2
+outline_color = Color(0, 0, 0, 1)
+
 [node name="User Interface" type="Control" unique_id=930908332]
 layout_mode = 3
 anchors_preset = 15
@@ -71,3 +76,16 @@ grow_horizontal = 2
 grow_vertical = 2
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Debug Label" type="Label" parent="." unique_id=1649461952]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -557.0
+offset_top = -1080.0
+grow_horizontal = 0
+grow_vertical = 0
+label_settings = SubResource("LabelSettings_mm06q")

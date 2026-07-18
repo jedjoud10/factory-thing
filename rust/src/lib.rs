@@ -195,6 +195,17 @@ impl INode3D for MachineNode {
     }
 
     fn process(&mut self, _delta: f32) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let machine = &bound.game.machines[self.key];
+        let progressing = machine.progress.is_some() && machine.status == MachineStatus::None;
+        
+        let smoke = self.base().find_child("Smoke Vfx").unwrap();
+        let mut smoke = smoke.cast::<GpuParticles3D>();
+        smoke.set_emitting(progressing);
     }
 
     fn exit_tree(&mut self) {
@@ -220,7 +231,21 @@ impl MachineNode {
         let machine = &bound.game.machines[self.key];
         let recipe = machine.recipe.unwrap();
         
-        let string = format!("machine. recipe: '{}'", recipe.id);
+        let string = format!("machine. recipe: '{}'. status: {:?}", recipe.id, machine.status);
+        
+        GString::from_str(&string).unwrap()
+    }
+
+    #[func]
+    fn get_debug_info(&mut self) -> GString {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let machine = &bound.game.machines[self.key];
+        
+        let string = format!("{:#?}", machine);
         
         GString::from_str(&string).unwrap()
     }

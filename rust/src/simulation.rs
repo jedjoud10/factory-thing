@@ -49,9 +49,6 @@ impl Hatch {
 #[derive(Debug)]
 pub struct Progress {
     pub ticks_remaining: NonZeroU16,
-    
-    // used if the machine is being underpowered / inefficient
-    pub slow_down_ticks_remaining: Option<NonZeroU16>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -59,8 +56,9 @@ pub enum MachineStatus {
     RecipeInputResourcesMismatchOrEmpty,
     RecipeOutputResourcesMismatchOrFull,
     
-    Underpowered,
     NonPowered,
+
+    ClickyThingNotAttached,
 
     #[default]
     None,
@@ -75,6 +73,7 @@ pub struct Machine {
     pub status: MachineStatus,
     pub pole: Option<PoleKey>,
     pub clicky_thing_attached: bool,
+    pub internal_power_buffer: LoadUnit,
 }
 
 #[derive(Debug)]
@@ -128,6 +127,19 @@ impl Default for Settings {
             belt_ticks_between_transfers: 16,
             belt_transfer_size: 1,
             silo_transfer_size: 1,
+            machine_require_clicky_thing_attached: true,
+        }
+    }
+}
+
+impl Settings {
+    fn testing() -> Self {
+        Self {
+            wire_damage_per_tick: None,
+            belt_buffer_scaling_factor: 2f32,
+            belt_ticks_between_transfers: 16,
+            belt_transfer_size: 1,
+            silo_transfer_size: 1,
             machine_require_clicky_thing_attached: false,
         }
     }
@@ -151,11 +163,13 @@ pub struct Simulation<R: registry::Registry> {
     pub registry: R
 }
 
-#[derive(PartialEq, Eq)]
-enum ResetProgressReason {
-    NoPower,
-    FinishedRecipe,
-    NoProgress,
+impl<R: registry::Registry> Simulation<R> {
+    pub fn testing() -> Self {
+        Self {
+            settings: Settings::testing(),
+            ..Default::default()
+        }
+    }
 }
 
 impl<R: registry::Registry> Simulation<R> {
@@ -340,33 +354,130 @@ impl<R: registry::Registry> Simulation<R> {
             hatch.buffer.invalidate();
         }
 
+        // doing belt logic before machine logic fixes "sigle-tick idle" issue when belt transfer speed === machine recipe tick speed (halting on input materials) 
+        for belt in belts.values_mut() {
+            let Belt {
+                belt_start,
+                belt_end,
+                ref mut buffer,
+                last_transfer_tick: ref mut last_transfer_ticks,
+            } = *belt;
+
+            // don't do anything if belt points to invalid hatches
+            if !hatches.contains_key(belt_start) || !hatches.contains_key(belt_end) {
+                continue;
+            }
+
+            // impossible that it overflows because self.tick > last_transfer_ticks, always
+            if (*tick - *last_transfer_ticks) >= settings.belt_ticks_between_transfers {
+                // godot::global::godot_print!("belt tick");
+                
+                let input_hatch = &hatches[belt_end];
+                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from::<R>(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
+
+                // order of operations:
+                // transfer last element in belt buffer to input hatch
+                // roll elements in belt buffer one to the right
+                // transfer output hatch item to first element in belt buffer
+                if predicate {
+                    *last_transfer_ticks = *tick;
+
+                    // godot::global::godot_print!("belt shifting");
+
+                    // element at index buffer.len()-1 is belt output
+                    let input_hatch = &mut hatches[belt_end];
+                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, settings.belt_transfer_size);
+
+                    // I'm shifting... I'm shifting....
+                    buffer.rotate_right(1);
+
+                    // first element must be reset to invalid now...
+                    buffer[0].invalidate();
+
+                    // element at index 0 is the belt input
+                    // belt takes input from hatch...
+                    let output_hatch = &mut hatches[belt_start];
+                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], settings.belt_transfer_size);
+                }
+            }
+        }
+
         for machine in machines.values_mut() {
-            let satisfied_and_target_load = machine.pole.map(|pole_id| match self.poles[pole_id] {
-                Pole::Consumer {
-                    target_load,
-                    current_load,
-                } => (current_load, target_load),
-                _ => unreachable!(),
-            });
+            // TODO: don't assume given recipe (for tests)
+            let recipe = machine.recipe.unwrap();
 
-            let opt_reset_progress = Self::do_progress(hatches, machine, satisfied_and_target_load);
+            // TODO: don't assume power pole (for tests)
+            let consumer_pole_id = machine.pole.unwrap();
 
-            if let Some(reset_progress_reason) = opt_reset_progress {
-                // reset consumption pole
-                if let Some(consumer_pole_id) = machine.pole {
-                    self.poles[consumer_pole_id] = Pole::Consumer {
-                        target_load: 0,
-                        current_load: 0,
-                    };
-                }
+            // set the machine's consumer pole to enabled state
+            let given_load = match self.poles[consumer_pole_id] {
+                Pole::Consumer { current_load, .. } => current_load,
+                _ => unreachable!()
+            };
 
-                // we must make sure to keep status otherwise it will get reset to "None" even though the reason was "NoPower"
-                if reset_progress_reason == ResetProgressReason::NoPower {
-                    machine.status = MachineStatus::NonPowered;
+            machine.internal_power_buffer += given_load;
+
+            // try to buffer 2 recipes worth of power in internal power buffer
+            if machine.internal_power_buffer < recipe.load * 2 {
+                self.poles[consumer_pole_id] = Pole::Consumer {
+                    target_load: recipe.load,
+                    current_load: 0,
+                };
+            } else {
+                self.poles[consumer_pole_id] = Pole::Consumer {
+                    target_load: 0,
+                    current_load: 0,
+                };
+            }
+
+            if settings.machine_require_clicky_thing_attached && !machine.clicky_thing_attached {
+                machine.status = MachineStatus::ClickyThingNotAttached;
+                continue;
+            }
+
+            if machine.internal_power_buffer < recipe.load {
+                machine.status = MachineStatus::NonPowered;
+                continue;
+            }
+
+            if let Some(progress) = machine.progress.as_mut() {
+                // check internal power buffer
+
+                machine.status = MachineStatus::None;
+                machine.internal_power_buffer -= recipe.load;
+
+                // machine is currently progressing through the recipe, take one tick off
+                // TODO: add pause / stop / resume functionality here
+                let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
+
+                if let Some(non_zero) = non_zero {
+                    // number of ticks is non-zero, update, and continue
+                    progress.ticks_remaining = non_zero;
                 } else {
-                    machine.status = MachineStatus::None;
-                }
+                    // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
+                    // take items from input hatches
+                    for (recipe_input, hatch_input) in
+                        recipe.input.iter().zip(machine.input.iter())
+                    {
+                        let buffer = &mut hatches[*hatch_input].buffer;
+                        buffer.take(recipe_input);
+                    }
 
+                    // put items in output hatches
+                    for (recipe_output, hatch_output) in
+                        recipe.output.iter().zip(machine.output.iter())
+                    {
+                        let buffer = &mut hatches[*hatch_output].buffer;
+                        buffer.accumulate::<R>(recipe_output);
+                    }
+
+                    // reset machine progress
+                    machine.progress.take().unwrap();
+                }
+            }
+            
+            
+            if machine.progress.is_none() {
                 if let Some(recipe) = machine.recipe {
                     assert_eq!(recipe.input.len(), machine.input.len(), "machine recipe input items count and input hatches count do not match");
                     assert_eq!(recipe.output.len(), machine.output.len(), "machine recipe output items count and output hatches count do not match");
@@ -407,25 +518,10 @@ impl<R: registry::Registry> Simulation<R> {
                         } else {
                             // godot::global::godot_print!("new progress");
 
-                            let ticks = if machine.clicky_thing_attached {
-                                recipe.ticks / 2
-                            } else {
-                                recipe.ticks
-                            };
-
                             machine.progress.replace(Progress {
-                                ticks_remaining: NonZeroU16::new(ticks)
+                                ticks_remaining: NonZeroU16::new(recipe.ticks)
                                     .expect("recipe ticks must not be zero"),
-                                slow_down_ticks_remaining: None,
                             });
-                        }
-
-                        // set the machine's consumer pole to enabled state
-                        if let Some(consumer_pole_id) = machine.pole {
-                            self.poles[consumer_pole_id] = Pole::Consumer {
-                                target_load: recipe.load,
-                                current_load: 0,
-                            };
                         }
                     } else {
                         if !inputs_match_recipe_input {
@@ -437,8 +533,6 @@ impl<R: registry::Registry> Simulation<R> {
                         }
                     }
                 }
-            } else {
-                //machine.status = MachineStatus::None
             }
         }
 
@@ -465,148 +559,8 @@ impl<R: registry::Registry> Simulation<R> {
             }
         }
 
-        for belt in belts.values_mut() {
-            let Belt {
-                belt_start,
-                belt_end,
-                ref mut buffer,
-                last_transfer_tick: ref mut last_transfer_ticks,
-            } = *belt;
-
-            // don't do anything if belt points to invalid hatches
-            if !hatches.contains_key(belt_start) || !hatches.contains_key(belt_end) {
-                continue;
-            }
-
-            // impossible that it overflows because self.tick > last_transfer_ticks, always
-            if (*tick - *last_transfer_ticks) >= self.settings.belt_ticks_between_transfers {
-                // godot::global::godot_print!("belt tick");
-                
-                let input_hatch = &hatches[belt_end];
-                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from::<R>(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
-
-                // order of operations:
-                // transfer last element in belt buffer to input hatch
-                // roll elements in belt buffer one to the right
-                // transfer output hatch item to first element in belt buffer
-                if predicate {
-                    *last_transfer_ticks = *tick;
-
-                    // godot::global::godot_print!("belt shifting");
-
-                    // element at index buffer.len()-1 is belt output
-                    let input_hatch = &mut hatches[belt_end];
-                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, self.settings.belt_transfer_size);
-
-                    // I'm shifting... I'm shifting....
-                    buffer.rotate_right(1);
-
-                    // first element must be reset to invalid now...
-                    buffer[0].invalidate();
-
-                    // element at index 0 is the belt input
-                    // belt takes input from hatch...
-                    let output_hatch = &mut hatches[belt_start];
-                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], self.settings.belt_transfer_size);
-                }
-            }
-        }
 
         *tick += 1;
-    }
-
-    fn do_progress(hatches: &mut SlotMap<HatchKey, Hatch>, machine: &mut Machine, satisfied_and_target_load: Option<(LoadUnit, LoadUnit)>) -> Option<ResetProgressReason> {
-        // godot::global::godot_print!("{:?}", satisfied_and_target_load);
-        let reset_progress = if let Some(progress) = machine.progress.as_mut() {
-            if let Some((satisfied, target)) = satisfied_and_target_load {
-                if satisfied == 0 {
-                    // "infinite" slow down ticks for machines that are not powered at all
-                    progress.slow_down_ticks_remaining = NonZeroU16::new(u16::MAX);
-                    machine.status = MachineStatus::NonPowered;
-                } else if satisfied < target {
-                    // godot::global::godot_print!("underpowered");
-                    machine.status = MachineStatus::Underpowered;
-    
-                    // can only update once this has been reset (in case fluctuating power) OR if it was previously set to specific value
-                    if progress.slow_down_ticks_remaining.is_none() || progress.slow_down_ticks_remaining == Some(NonZeroU16::new(u16::MAX).unwrap())  {
-                        // calculate efficiency percentage
-                        let percent = satisfied as f32 / target as f32;
-    
-                        // 100% result in 1 ticks (which will get reset immediately after it gets set)
-                        // 50% result in 2 ticks
-                        // 25% result in 4 ticks
-                        // TODO: replace this, as we cannot represent inefficiencies >50% but <100% in slow down ticks
-                        let inv = (1.0f32 / percent) as u16;
-                        progress.slow_down_ticks_remaining = NonZeroU16::new(inv);
-                    }
-                } else {
-                    // no slow down for fully powered shii
-                    progress.slow_down_ticks_remaining = None;
-                }
-            } else {
-                // no slow down ticks for machines without poles
-                progress.slow_down_ticks_remaining = None;
-            }
-    
-            // prioritize slow down ticks first
-            let progress_normally = if let Some(slow_down_ticks) = progress.slow_down_ticks_remaining {
-                // special case: non powered machines 
-                if slow_down_ticks.get() == u16::MAX {
-                    // we must RESET progress
-                    return Some(ResetProgressReason::NoPower);
-                } else {
-                    // if the decremented slow_down_ticks_remaning is zero, then it will result in None (which works in our favour)
-                    progress.slow_down_ticks_remaining = NonZeroU16::new(slow_down_ticks.get() - 1);
-    
-                    // when this is none, then we have progressed through all slowdown ticks
-                    progress.slow_down_ticks_remaining.is_none()
-                }
-            } else {
-                true
-            };
-    
-            if progress_normally {
-                // machine is currently progressing through the recipe, take one tick off
-                // TODO: add pause / stop / resume functionality here
-                let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
-    
-                if let Some(non_zero) = non_zero {
-                    // number of ticks is non-zero, update, and continue
-                    progress.ticks_remaining = non_zero;
-                    None
-                } else {
-                    // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
-                    // `unwrap` here is safe because the `recipe: Option<&'static Recipe>` should not be set to `None` when a machine is progressing
-                    let recipe = &machine.recipe.unwrap();
-    
-                    // take items from input hatches
-                    for (recipe_input, hatch_input) in
-                        recipe.input.iter().zip(machine.input.iter())
-                    {
-                        let buffer = &mut hatches[*hatch_input].buffer;
-                        buffer.take(recipe_input);
-                    }
-    
-                    // put items in output hatches
-                    for (recipe_output, hatch_output) in
-                        recipe.output.iter().zip(machine.output.iter())
-                    {
-                        let buffer = &mut hatches[*hatch_output].buffer;
-                        buffer.accumulate::<R>(recipe_output);
-                    }
-    
-                    // reset machine progress
-                    machine.progress.take().unwrap();
-                    Some(ResetProgressReason::FinishedRecipe)
-                }
-            } else {
-                None
-            }
-        } else {
-            Some(ResetProgressReason::NoProgress)
-        };
-        
-        reset_progress
     }
 }
 
