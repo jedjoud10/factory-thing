@@ -1,0 +1,34 @@
+use super::*;
+
+#[derive(GodotClass)]
+#[class(base=Node3D)]
+pub struct GeneratorNode {
+    base: Base<Node3D>,
+    
+    #[export]
+    load: u32,
+}
+
+#[godot_api]
+impl INode3D for GeneratorNode {
+    fn init(base: Base<Node3D>) -> Self {
+        Self {
+            base,
+            load: 0,
+        }
+    }
+
+    fn ready(&mut self) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let mut factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let mut bound = factory_manager.bind_mut();
+
+        let mut _pole = self.base().get_node_as::<PoleNode>("Power Pole");
+        let mut pole = _pole.bind_mut();
+        pole.owned = true;
+
+        bound.game.add_generator_with_pole(self.load as LoadUnit, pole.key);
+    }
+}

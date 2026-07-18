@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::OnceLock};
-
 use crate::{Item, LoadUnit};
 
 pub trait Registry: Default {
@@ -129,85 +127,6 @@ impl Registry for DefaultRegistry {
         &Self::RECIPES.iter().find(|x| x.id == id).unwrap()
     }
 }
-
-
-#[derive(Default)]
-pub struct TestRegistry;
-
-impl TestRegistry {
-    pub const RAW_IRON_1: u8 = 1;
-    pub const CRUSHED_IRON: u8 = 2;
-    pub const IRON_DUST: u8 = 3;
-    pub const IRON_INGOT: u8 = 4;
-
-    pub const ITEMS: &[RegistryItem<()>] = &[
-        RegistryItem {
-            name: "invalid",
-            stack_size: 0,
-            data: ()
-        },
-        RegistryItem {
-            name: "Raw Iron",
-            stack_size: 255,
-            data: ()
-        },
-        RegistryItem {
-            name: "Crushed Iron",
-            stack_size: 255,
-            data: ()
-        },
-        RegistryItem {
-            name: "Iron Dust",
-            stack_size: 255,
-            data: ()
-        },
-        RegistryItem {
-            name: "Iron Ingot",
-            stack_size: 255,
-            data: ()
-        },
-    ];
-
-    pub const CRUSH_IRON_RECIPE: Recipe = Recipe {
-        id: "crush_iron",
-        name: "",
-        input: &[Item::one(Self::RAW_IRON_1)],
-        output: &[Item::one(Self::CRUSHED_IRON)],
-        ticks: 16,
-        load: 10,
-    };
-
-    pub const CRUSH_IRON_MORE_RECIPE: Recipe = Recipe {
-        id: "crush_iron_more",
-        name: "",
-        input: &[Item::one(Self::CRUSHED_IRON)],
-        output: &[Item::one(Self::IRON_DUST)],
-        ticks: 16,
-        load: 10,
-    };
-
-    pub const SMELT_IRON_RECIPE: Recipe = Recipe {
-        id: "smelt_iron",
-        name: "",
-        input: &[Item::one(Self::IRON_DUST)],
-        output: &[Item::one(Self::IRON_INGOT)],
-        ticks: 4,
-        load: 0,
-    };
-}
-
-impl Registry for TestRegistry {
-    type Data = ();
-
-    fn registry_item(id: u8) -> &'static RegistryItem<()> {
-        &Self::ITEMS[id as usize]
-    }
-    
-    fn registry_recipe(string_id: &str) -> &'static Recipe {
-        todo!()
-    }
-}
-
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct RegistryItem<Data> {

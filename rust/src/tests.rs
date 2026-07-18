@@ -1,6 +1,112 @@
 #[cfg(test)]
+mod test_registry {
+    use crate::registry::*;
+    use crate::items::*;
+
+    #[derive(Default)]
+    pub struct TestRegistry;    
+
+    impl TestRegistry {
+        pub const RAW_IRON_1: u8 = 1;
+        pub const CRUSHED_IRON: u8 = 2;
+        pub const IRON_DUST: u8 = 3;
+        pub const IRON_INGOT: u8 = 4;   
+
+        pub const ITEMS: &[RegistryItem<()>] = &[
+            RegistryItem {
+                name: "invalid",
+                stack_size: 0,
+                data: ()
+            },
+            RegistryItem {
+                name: "Raw Iron",
+                stack_size: 255,
+                data: ()
+            },
+            RegistryItem {
+                name: "Crushed Iron",
+                stack_size: 255,
+                data: ()
+            },
+            RegistryItem {
+                name: "Iron Dust",
+                stack_size: 255,
+                data: ()
+            },
+            RegistryItem {
+                name: "Iron Ingot",
+                stack_size: 255,
+                data: ()
+            },
+        ];  
+
+        pub const CRUSH_IRON_RECIPE: Recipe = Recipe {
+            id: "crush_iron",
+            name: "",
+            input: &[Item::one(Self::RAW_IRON_1)],
+            output: &[Item::one(Self::CRUSHED_IRON)],
+            ticks: 16,
+            load: 10,
+        };  
+
+        pub const CRUSH_IRON_MORE_RECIPE: Recipe = Recipe {
+            id: "crush_iron_more",
+            name: "",
+            input: &[Item::one(Self::CRUSHED_IRON)],
+            output: &[Item::one(Self::IRON_DUST)],
+            ticks: 16,
+            load: 10,
+        };  
+
+        pub const SMELT_IRON_RECIPE: Recipe = Recipe {
+            id: "smelt_iron",
+            name: "",
+            input: &[Item::one(Self::IRON_DUST)],
+            output: &[Item::one(Self::IRON_INGOT)],
+            ticks: 4,
+            load: 0,
+        };
+    }   
+
+    impl Registry for TestRegistry {
+        type Data = (); 
+
+        fn registry_item(id: u8) -> &'static RegistryItem<()> {
+            &Self::ITEMS[id as usize]
+        }
+
+        fn registry_recipe(string_id: &str) -> &'static Recipe {
+            todo!()
+        }
+    }
+
+    impl crate::simulation::Settings {
+        fn testing() -> Self {
+            Self {
+                wire_damage_per_tick: None,
+                belt_buffer_scaling_factor: 2f32,
+                belt_ticks_between_transfers: 16,
+                belt_transfer_size: 1,
+                silo_transfer_size: 1,
+                machine_require_clicky_thing_attached: false,
+            }
+        }
+    }
+
+
+    impl<R: Registry> crate::simulation::Simulation<R> {
+        pub fn testing() -> Self {
+            Self {
+                settings: crate::simulation::Settings::testing(),
+                ..Default::default()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod power_tests {
-    use crate::registry::TestRegistry;
+    use super::test_registry::*;
     use crate::*;
 
     type TestGame = Simulation<TestRegistry>;
@@ -328,7 +434,7 @@ mod power_tests {
 
 #[cfg(test)]
 mod sink_source_tests {
-    use crate::registry::TestRegistry;
+    use super::test_registry::*;
     use crate::*;
 
     type TestGame = Simulation<TestRegistry>;

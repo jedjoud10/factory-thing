@@ -124,6 +124,7 @@ impl Item {
     }
 }
 
+#[cfg(test)]
 mod item_tests {
     use super::*;
     use crate::{registry::{Registry, RegistryItem}, simulation::*};

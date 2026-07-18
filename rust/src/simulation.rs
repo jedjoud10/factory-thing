@@ -132,19 +132,6 @@ impl Default for Settings {
     }
 }
 
-impl Settings {
-    fn testing() -> Self {
-        Self {
-            wire_damage_per_tick: None,
-            belt_buffer_scaling_factor: 2f32,
-            belt_ticks_between_transfers: 16,
-            belt_transfer_size: 1,
-            silo_transfer_size: 1,
-            machine_require_clicky_thing_attached: false,
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct Simulation<R: registry::Registry> {
     pub hatches: SlotMap<HatchKey, Hatch>,
@@ -163,14 +150,380 @@ pub struct Simulation<R: registry::Registry> {
     pub registry: R
 }
 
-impl<R: registry::Registry> Simulation<R> {
-    pub fn testing() -> Self {
-        Self {
-            settings: Settings::testing(),
-            ..Default::default()
+
+
+
+fn handle_silos<R: registry::Registry>(hatches: &mut SlotMap<HatchKey, Hatch>, silos: &mut SlotMap<SiloKey, Silo>, settings: &mut Settings) {
+    for silo in silos.values_mut() {
+        let input = &mut hatches[silo.input].buffer;
+        let mut taken = Item::invalid();
+        Item::transfer_limited::<R>(input, &mut taken, settings.silo_transfer_size);
+
+        if !taken.is_invalid() {
+            silo.stack.push(taken);
+        }
+
+        if let Some(last) = silo.stack.last_mut() {
+            let predicate = hatches[silo.output].buffer.can_accumulate_from::<R>(last);
+
+            if predicate {
+                let output = &mut hatches[silo.output].buffer;
+                Item::transfer_limited::<R>(last, output, settings.silo_transfer_size);
+
+                if last.is_invalid() {
+                    silo.stack.pop().unwrap();
+                }
+            }
         }
     }
 }
+
+
+fn handle_machines<R: registry::Registry>(machines: &mut SlotMap<MachineKey, Machine>, poles: &mut SlotMap<PoleKey, Pole>, hatches: &mut SlotMap<HatchKey, Hatch>, settings: &mut Settings) {
+    for machine in machines.values_mut() {
+        // TODO: don't assume given recipe (for tests)
+        let recipe = machine.recipe.unwrap();
+
+        // TODO: don't assume power pole (for tests)
+        let consumer_pole_id = machine.pole.unwrap();
+
+        // set the machine's consumer pole to enabled state
+        let given_load = match poles[consumer_pole_id] {
+            Pole::Consumer { current_load, .. } => current_load,
+            _ => unreachable!()
+        };
+
+        machine.internal_power_buffer += given_load;
+
+        // try to buffer 2 recipes worth of power in internal power buffer
+        if machine.internal_power_buffer < recipe.load * 2 {
+            poles[consumer_pole_id] = Pole::Consumer {
+                target_load: recipe.load,
+                current_load: 0,
+            };
+        } else {
+            poles[consumer_pole_id] = Pole::Consumer {
+                target_load: 0,
+                current_load: 0,
+            };
+        }
+
+        if settings.machine_require_clicky_thing_attached && !machine.clicky_thing_attached {
+            machine.status = MachineStatus::ClickyThingNotAttached;
+            continue;
+        }
+
+        if machine.internal_power_buffer < recipe.load {
+            machine.status = MachineStatus::NonPowered;
+            continue;
+        }
+
+        if let Some(progress) = machine.progress.as_mut() {
+            // check internal power buffer
+
+            machine.status = MachineStatus::None;
+            machine.internal_power_buffer -= recipe.load;
+
+            // machine is currently progressing through the recipe, take one tick off
+            // TODO: add pause / stop / resume functionality here
+            let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
+
+            if let Some(non_zero) = non_zero {
+                // number of ticks is non-zero, update, and continue
+                progress.ticks_remaining = non_zero;
+            } else {
+                // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
+                // take items from input hatches
+                for (recipe_input, hatch_input) in
+                    recipe.input.iter().zip(machine.input.iter())
+                {
+                    let buffer = &mut hatches[*hatch_input].buffer;
+                    buffer.take(recipe_input);
+                }
+
+                // put items in output hatches
+                for (recipe_output, hatch_output) in
+                    recipe.output.iter().zip(machine.output.iter())
+                {
+                    let buffer = &mut hatches[*hatch_output].buffer;
+                    buffer.accumulate::<R>(recipe_output);
+                }
+
+                // reset machine progress
+                machine.progress.take().unwrap();
+            }
+        }
+
+
+        if machine.progress.is_none() {
+            if let Some(recipe) = machine.recipe {
+                assert_eq!(recipe.input.len(), machine.input.len(), "machine recipe input items count and input hatches count do not match");
+                assert_eq!(recipe.output.len(), machine.output.len(), "machine recipe output items count and output hatches count do not match");
+
+                let inputs_match_recipe_input =
+                    recipe.input.iter().zip(machine.input.iter()).all(
+                        |(recipe_input_item, input_hatch)| {
+                            let buffer = hatches[*input_hatch].buffer;
+                            buffer.id == recipe_input_item.id
+                                && buffer.count >= recipe_input_item.count
+                        },
+                    );
+                let outputs_match_recipe_output =
+                    recipe.output.iter().zip(machine.output.iter()).all(
+                        |(recipe_output_item, output_hatch)| {
+                            let buffer = hatches[*output_hatch].buffer;
+                            if buffer.is_invalid() {
+                                return true;
+                            }
+
+                            // if the item is the same, must make sure that we have enough space in the hatch to place it 
+                            let same_id = buffer.id == recipe_output_item.id;
+                            let stack_size = R::stack_size(buffer.id);
+
+                            // this CAN overflow if stack size is at MAX
+                            // if we know it will overflow, then we cannot process the recipe
+                            let opt_non_overflowing_enough_space_considering_stack_size = buffer.count.checked_add(recipe_output_item.count).map(|x| x <= stack_size);
+                            same_id && opt_non_overflowing_enough_space_considering_stack_size.unwrap_or_default()
+                        },
+                    );
+
+                // if requirements are met, then we can begin machine progress
+                if inputs_match_recipe_input && outputs_match_recipe_output {
+                    // resume the progress previously (can only happen if we lose power in the middle of a recipe)
+                    if let Some(previous_progress) = machine.progress.take() {
+                        // godot::global::godot_print!("progress already existed");
+                        machine.progress = Some(previous_progress);
+                    } else {
+                        // godot::global::godot_print!("new progress");
+
+                        machine.progress.replace(Progress {
+                            ticks_remaining: NonZeroU16::new(recipe.ticks)
+                                .expect("recipe ticks must not be zero"),
+                        });
+                    }
+                } else {
+                    if !inputs_match_recipe_input {
+                        machine.status = MachineStatus::RecipeInputResourcesMismatchOrEmpty;
+                    }
+
+                    if !outputs_match_recipe_output {
+                        machine.status = MachineStatus::RecipeOutputResourcesMismatchOrFull;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn handle_belts<R: registry::Registry>(belts: &mut SlotMap<BeltKey, Belt>, hatches: &mut SlotMap<HatchKey, Hatch>, tick: &mut u64, settings: &mut Settings) {
+    for belt in belts.values_mut() {
+        let Belt {
+            belt_start,
+            belt_end,
+            ref mut buffer,
+            last_transfer_tick: ref mut last_transfer_ticks,
+        } = *belt;
+
+        // don't do anything if belt points to invalid hatches
+        if !hatches.contains_key(belt_start) || !hatches.contains_key(belt_end) {
+            continue;
+        }
+
+        // impossible that it overflows because self.tick > last_transfer_ticks, always
+        if (*tick - *last_transfer_ticks) >= settings.belt_ticks_between_transfers {
+            // godot::global::godot_print!("belt tick");
+        
+            let input_hatch = &hatches[belt_end];
+            let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from::<R>(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
+
+            // order of operations:
+            // transfer last element in belt buffer to input hatch
+            // roll elements in belt buffer one to the right
+            // transfer output hatch item to first element in belt buffer
+            if predicate {
+                *last_transfer_ticks = *tick;
+
+                // godot::global::godot_print!("belt shifting");
+
+                // element at index buffer.len()-1 is belt output
+                let input_hatch = &mut hatches[belt_end];
+                Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, settings.belt_transfer_size);
+
+                // I'm shifting... I'm shifting....
+                buffer.rotate_right(1);
+
+                // first element must be reset to invalid now...
+                buffer[0].invalidate();
+
+                // element at index 0 is the belt input
+                // belt takes input from hatch...
+                let output_hatch = &mut hatches[belt_start];
+                Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], settings.belt_transfer_size);
+            }
+        }
+    }
+}
+
+fn handle_power(poles: &mut SlotMap<PoleKey, Pole>, wires: &mut SlotMap<WireKey, Wire>) {
+    // create adjacency map that stores neighbouring poles
+    let mut lookup = HashMap::<PoleKey, Vec<(PoleKey, WireKey)>>::new();
+    for (wire_key, Wire { a, b, .. }) in wires.iter() {
+        lookup
+            .entry(*a)
+            .or_default()
+            .push((*b, wire_key));
+        lookup
+            .entry(*b)
+            .or_default()
+            .push((*a, wire_key));
+    }
+
+    // reset load of poles
+    for pole in poles.values_mut() {
+        match pole {
+            Pole::Generator { current_load, .. } => {
+                *current_load = 0;
+            }
+            Pole::Consumer { current_load, .. } => {
+                *current_load = 0;
+            }
+            Pole::Other => {}
+        }
+    }
+
+    // reset wire flow
+    for wire in wires.values_mut() {
+        wire.flow = 0;
+    }
+
+    // get all pole consumers
+    let consumers = poles
+        .iter()
+        .filter_map(|(index, pole)| {
+            if let Pole::Consumer { target_load, .. } = pole {
+                Some((index, *target_load))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // for each consumer, it will run a BFS starting at the consumer pole and grow until it gets enough power 
+    for (consumer_index, consumer_target_load) in consumers {
+        assert!(consumer_target_load >= 0);
+        let mut consumer_current_load = 0;
+
+        let mut backtracking = HashMap::<PoleKey, (PoleKey, WireKey)>::new();
+        let mut generators_used = HashSet::<(PoleKey, LoadUnit)>::new();
+        let mut visited = HashSet::<PoleKey>::new();
+
+        let mut queue = VecDeque::<PoleKey>::new();
+
+        // in case of pole but not connected to anything
+        if lookup.contains_key(&consumer_index) {
+            queue.push_back(consumer_index);
+        }
+
+        // simple BFS shortest-path search to find enough load to satisfy consumer
+        'pathfind: while let Some(index) = queue.pop_front() {
+            let neighbours = &lookup[&index];
+
+            for (neighbour_index, wire_index) in neighbours {
+                let consumer_remaining_load_to_satisfy =
+                    consumer_target_load - consumer_current_load;
+
+                assert!(consumer_remaining_load_to_satisfy >= 0);
+
+                // consumer has fully satisfied load, we can exit early
+                if consumer_remaining_load_to_satisfy == 0 {
+                    break 'pathfind;
+                }
+
+                let neighbour = &mut poles[*neighbour_index];
+
+                if visited.insert(*neighbour_index) {
+                    match neighbour {
+                        Pole::Generator {
+                            max_load,
+                            current_load: current_generator_load,
+                        } => {
+                            // calculate the generator's remaining load
+                            let generator_remaining_load = *max_load - *current_generator_load;
+
+                            // calculcate how much load the consumer should take off of that
+                            let consumer_taken_load = generator_remaining_load
+                                .min(consumer_remaining_load_to_satisfy);
+
+                            // add load to consumer
+                            consumer_current_load += consumer_taken_load;
+
+                            // add load to generator
+                            *current_generator_load += consumer_taken_load;
+
+                            backtracking.insert(*neighbour_index, (index, *wire_index));
+                            generators_used.insert((*neighbour_index, consumer_taken_load));
+                        }
+                        Pole::Consumer { .. } => {}
+                        Pole::Other => {
+                            queue.push_back(*neighbour_index);
+                            backtracking.insert(*neighbour_index, (index, *wire_index));
+                        }
+                    }
+                }
+            }
+        }
+
+        match &mut poles[consumer_index] {
+            Pole::Consumer { current_load, .. } => {
+                *current_load = consumer_current_load;
+            }
+            _ => unreachable!(),
+        }
+
+        // starting from the used generators, backtrack towards the consumer and modify wire flow along the way
+        for (generator_used, load) in generators_used {
+            // starts at generator
+            let mut opt_pole = Some(generator_used);
+
+            // `pole` is the pole closer to the generator
+            while let Some(pole) = opt_pole.take() {
+                // eventually this will reach the consumer itself
+                // `new_pole_id` is the pole closer to the consumer
+                if let Some((new_pole_id, wire_index)) = backtracking.get(&pole).copied() {
+                    opt_pole = Some(new_pole_id);
+
+                    let wire = &mut wires[wire_index];
+                    if wire.a == pole && wire.b == new_pole_id {
+                        // `a` is closer to gen
+                        // `b` is closer to con
+                        wires[wire_index].flow += load; // flow from `a` to `b` is positive
+                    } else if wire.b == pole && wire.a == new_pole_id {
+                        // `a` is closer to con
+                        // `b` is closer to gen
+                        wires[wire_index].flow -= load; // flow from `a` to `b` is negative
+                    } else {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn handle_wire_damage(wires: &mut SlotMap<WireKey, Wire>, settings: &mut Settings) {
+    // before we reset wire flow, check for max flow and do damage tick
+    if let Some(wire_damage_per_tick) = settings.wire_damage_per_tick {
+        for wire in wires.values_mut() {
+            if wire.flow.abs() > wire.max_flow {
+                wire.damage = wire.damage.saturating_add(wire_damage_per_tick);
+            }
+        }
+
+        wires.retain(|_, w| w.damage < u8::MAX);
+    }
+}
+
+
 
 impl<R: registry::Registry> Simulation<R> {
     pub fn tick(&mut self) {
@@ -186,161 +539,9 @@ impl<R: registry::Registry> Simulation<R> {
             ..
         } = self;
 
-        // before we reset wire flow, check for max flow and do damage tick
-        if let Some(wire_damage_per_tick) = settings.wire_damage_per_tick {
-            for wire in wires.values_mut() {
-                if wire.flow.abs() > wire.max_flow {
-                    wire.damage = wire.damage.saturating_add(wire_damage_per_tick);
-                }
-            }
+        handle_wire_damage(wires, settings);
 
-            wires.retain(|_, w| w.damage < u8::MAX);
-        }
-
-
-        // create adjacency map that stores neighbouring poles
-        let mut lookup = HashMap::<PoleKey, Vec<(PoleKey, WireKey)>>::new();
-        for (wire_key, Wire { a, b, .. }) in wires.iter() {
-            lookup
-                .entry(*a)
-                .or_default()
-                .push((*b, wire_key));
-            lookup
-                .entry(*b)
-                .or_default()
-                .push((*a, wire_key));
-        }
-
-        // reset load of poles
-        for pole in poles.values_mut() {
-            match pole {
-                Pole::Generator { current_load, .. } => {
-                    *current_load = 0;
-                }
-                Pole::Consumer { current_load, .. } => {
-                    *current_load = 0;
-                }
-                Pole::Other => {}
-            }
-        }
-
-        // reset wire flow
-        for wire in wires.values_mut() {
-            wire.flow = 0;
-        }
-
-        // get all pole consumers
-        let consumers = poles
-            .iter()
-            .filter_map(|(index, pole)| {
-                if let Pole::Consumer { target_load, .. } = pole {
-                    Some((index, *target_load))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        // for each consumer, it will run a BFS starting at the consumer pole and grow until it gets enough power 
-        for (consumer_index, consumer_target_load) in consumers {
-            assert!(consumer_target_load >= 0);
-            let mut consumer_current_load = 0;
-
-            let mut backtracking = HashMap::<PoleKey, (PoleKey, WireKey)>::new();
-            let mut generators_used = HashSet::<(PoleKey, LoadUnit)>::new();
-            let mut visited = HashSet::<PoleKey>::new();
-
-            let mut queue = VecDeque::<PoleKey>::new();
-
-            // in case of pole but not connected to anything
-            if lookup.contains_key(&consumer_index) {
-                queue.push_back(consumer_index);
-            }
-
-            // simple BFS shortest-path search to find enough load to satisfy consumer
-            'pathfind: while let Some(index) = queue.pop_front() {
-                let neighbours = &lookup[&index];
-
-                for (neighbour_index, wire_index) in neighbours {
-                    let consumer_remaining_load_to_satisfy =
-                        consumer_target_load - consumer_current_load;
-
-                    assert!(consumer_remaining_load_to_satisfy >= 0);
-
-                    // consumer has fully satisfied load, we can exit early
-                    if consumer_remaining_load_to_satisfy == 0 {
-                        break 'pathfind;
-                    }
-
-                    let neighbour = &mut poles[*neighbour_index];
-
-                    if visited.insert(*neighbour_index) {
-                        match neighbour {
-                            Pole::Generator {
-                                max_load,
-                                current_load: current_generator_load,
-                            } => {
-                                // calculate the generator's remaining load
-                                let generator_remaining_load = *max_load - *current_generator_load;
-
-                                // calculcate how much load the consumer should take off of that
-                                let consumer_taken_load = generator_remaining_load
-                                    .min(consumer_remaining_load_to_satisfy);
-
-                                // add load to consumer
-                                consumer_current_load += consumer_taken_load;
-
-                                // add load to generator
-                                *current_generator_load += consumer_taken_load;
-
-                                backtracking.insert(*neighbour_index, (index, *wire_index));
-                                generators_used.insert((*neighbour_index, consumer_taken_load));
-                            }
-                            Pole::Consumer { .. } => {}
-                            Pole::Other => {
-                                queue.push_back(*neighbour_index);
-                                backtracking.insert(*neighbour_index, (index, *wire_index));
-                            }
-                        }
-                    }
-                }
-            }
-
-            match &mut poles[consumer_index] {
-                Pole::Consumer { current_load, .. } => {
-                    *current_load = consumer_current_load;
-                }
-                _ => unreachable!(),
-            }
-
-            // starting from the used generators, backtrack towards the consumer and modify wire flow along the way
-            for (generator_used, load) in generators_used {
-                // starts at generator
-                let mut opt_pole = Some(generator_used);
-
-                // `pole` is the pole closer to the generator
-                while let Some(pole) = opt_pole.take() {
-                    // eventually this will reach the consumer itself
-                    // `new_pole_id` is the pole closer to the consumer
-                    if let Some((new_pole_id, wire_index)) = backtracking.get(&pole).copied() {
-                        opt_pole = Some(new_pole_id);
-
-                        let wire = &mut wires[wire_index];
-                        if wire.a == pole && wire.b == new_pole_id {
-                            // `a` is closer to gen
-                            // `b` is closer to con
-                            wires[wire_index].flow += load; // flow from `a` to `b` is positive
-                        } else if wire.b == pole && wire.a == new_pole_id {
-                            // `a` is closer to con
-                            // `b` is closer to gen
-                            wires[wire_index].flow -= load; // flow from `a` to `b` is negative
-                        } else {
-                            unreachable!();
-                        }
-                    }
-                }
-            }
-        }
+        handle_power(poles, wires);
 
         // update debug sources
         for (source, item) in self.sources.iter() {
@@ -355,210 +556,11 @@ impl<R: registry::Registry> Simulation<R> {
         }
 
         // doing belt logic before machine logic fixes "sigle-tick idle" issue when belt transfer speed === machine recipe tick speed (halting on input materials) 
-        for belt in belts.values_mut() {
-            let Belt {
-                belt_start,
-                belt_end,
-                ref mut buffer,
-                last_transfer_tick: ref mut last_transfer_ticks,
-            } = *belt;
+        handle_belts::<R>(belts, hatches, tick, settings);
 
-            // don't do anything if belt points to invalid hatches
-            if !hatches.contains_key(belt_start) || !hatches.contains_key(belt_end) {
-                continue;
-            }
+        handle_machines::<R>(machines, poles, hatches, settings);
 
-            // impossible that it overflows because self.tick > last_transfer_ticks, always
-            if (*tick - *last_transfer_ticks) >= settings.belt_ticks_between_transfers {
-                // godot::global::godot_print!("belt tick");
-                
-                let input_hatch = &hatches[belt_end];
-                let predicate = input_hatch.buffer.is_invalid() || (input_hatch.buffer.can_accumulate_from::<R>(buffer.last().unwrap()) || buffer.last().unwrap().is_invalid());
-
-                // order of operations:
-                // transfer last element in belt buffer to input hatch
-                // roll elements in belt buffer one to the right
-                // transfer output hatch item to first element in belt buffer
-                if predicate {
-                    *last_transfer_ticks = *tick;
-
-                    // godot::global::godot_print!("belt shifting");
-
-                    // element at index buffer.len()-1 is belt output
-                    let input_hatch = &mut hatches[belt_end];
-                    Item::transfer_limited::<R>(buffer.last_mut().unwrap(), &mut input_hatch.buffer, settings.belt_transfer_size);
-
-                    // I'm shifting... I'm shifting....
-                    buffer.rotate_right(1);
-
-                    // first element must be reset to invalid now...
-                    buffer[0].invalidate();
-
-                    // element at index 0 is the belt input
-                    // belt takes input from hatch...
-                    let output_hatch = &mut hatches[belt_start];
-                    Item::transfer_limited::<R>(&mut output_hatch.buffer, &mut buffer[0], settings.belt_transfer_size);
-                }
-            }
-        }
-
-        for machine in machines.values_mut() {
-            // TODO: don't assume given recipe (for tests)
-            let recipe = machine.recipe.unwrap();
-
-            // TODO: don't assume power pole (for tests)
-            let consumer_pole_id = machine.pole.unwrap();
-
-            // set the machine's consumer pole to enabled state
-            let given_load = match self.poles[consumer_pole_id] {
-                Pole::Consumer { current_load, .. } => current_load,
-                _ => unreachable!()
-            };
-
-            machine.internal_power_buffer += given_load;
-
-            // try to buffer 2 recipes worth of power in internal power buffer
-            if machine.internal_power_buffer < recipe.load * 2 {
-                self.poles[consumer_pole_id] = Pole::Consumer {
-                    target_load: recipe.load,
-                    current_load: 0,
-                };
-            } else {
-                self.poles[consumer_pole_id] = Pole::Consumer {
-                    target_load: 0,
-                    current_load: 0,
-                };
-            }
-
-            if settings.machine_require_clicky_thing_attached && !machine.clicky_thing_attached {
-                machine.status = MachineStatus::ClickyThingNotAttached;
-                continue;
-            }
-
-            if machine.internal_power_buffer < recipe.load {
-                machine.status = MachineStatus::NonPowered;
-                continue;
-            }
-
-            if let Some(progress) = machine.progress.as_mut() {
-                // check internal power buffer
-
-                machine.status = MachineStatus::None;
-                machine.internal_power_buffer -= recipe.load;
-
-                // machine is currently progressing through the recipe, take one tick off
-                // TODO: add pause / stop / resume functionality here
-                let non_zero = NonZeroU16::new(progress.ticks_remaining.get() - 1);
-
-                if let Some(non_zero) = non_zero {
-                    // number of ticks is non-zero, update, and continue
-                    progress.ticks_remaining = non_zero;
-                } else {
-                    // machine finished the recipe (remaining ticks is zero, but no need to update it, as we invalidate `progress` anyways)
-                    // take items from input hatches
-                    for (recipe_input, hatch_input) in
-                        recipe.input.iter().zip(machine.input.iter())
-                    {
-                        let buffer = &mut hatches[*hatch_input].buffer;
-                        buffer.take(recipe_input);
-                    }
-
-                    // put items in output hatches
-                    for (recipe_output, hatch_output) in
-                        recipe.output.iter().zip(machine.output.iter())
-                    {
-                        let buffer = &mut hatches[*hatch_output].buffer;
-                        buffer.accumulate::<R>(recipe_output);
-                    }
-
-                    // reset machine progress
-                    machine.progress.take().unwrap();
-                }
-            }
-            
-            
-            if machine.progress.is_none() {
-                if let Some(recipe) = machine.recipe {
-                    assert_eq!(recipe.input.len(), machine.input.len(), "machine recipe input items count and input hatches count do not match");
-                    assert_eq!(recipe.output.len(), machine.output.len(), "machine recipe output items count and output hatches count do not match");
-
-                    let inputs_match_recipe_input =
-                        recipe.input.iter().zip(machine.input.iter()).all(
-                            |(recipe_input_item, input_hatch)| {
-                                let buffer = hatches[*input_hatch].buffer;
-                                buffer.id == recipe_input_item.id
-                                    && buffer.count >= recipe_input_item.count
-                            },
-                        );
-                    let outputs_match_recipe_output =
-                        recipe.output.iter().zip(machine.output.iter()).all(
-                            |(recipe_output_item, output_hatch)| {
-                                let buffer = hatches[*output_hatch].buffer;
-                                if buffer.is_invalid() {
-                                    return true;
-                                }
-
-                                // if the item is the same, must make sure that we have enough space in the hatch to place it 
-                                let same_id = buffer.id == recipe_output_item.id;
-                                let stack_size = R::stack_size(buffer.id);
-
-                                // this CAN overflow if stack size is at MAX
-                                // if we know it will overflow, then we cannot process the recipe
-                                let opt_non_overflowing_enough_space_considering_stack_size = buffer.count.checked_add(recipe_output_item.count).map(|x| x <= stack_size);
-                                same_id && opt_non_overflowing_enough_space_considering_stack_size.unwrap_or_default()
-                            },
-                        );
-
-                    // if requirements are met, then we can begin machine progress
-                    if inputs_match_recipe_input && outputs_match_recipe_output {
-                        // resume the progress previously (can only happen if we lose power in the middle of a recipe)
-                        if let Some(previous_progress) = machine.progress.take() {
-                            // godot::global::godot_print!("progress already existed");
-                            machine.progress = Some(previous_progress);
-                        } else {
-                            // godot::global::godot_print!("new progress");
-
-                            machine.progress.replace(Progress {
-                                ticks_remaining: NonZeroU16::new(recipe.ticks)
-                                    .expect("recipe ticks must not be zero"),
-                            });
-                        }
-                    } else {
-                        if !inputs_match_recipe_input {
-                            machine.status = MachineStatus::RecipeInputResourcesMismatchOrEmpty;
-                        }
-
-                        if !outputs_match_recipe_output {
-                            machine.status = MachineStatus::RecipeOutputResourcesMismatchOrFull;
-                        }
-                    }
-                }
-            }
-        }
-
-        for silo in silos.values_mut() {
-            let input = &mut hatches[silo.input].buffer;
-            let mut taken = Item::invalid();
-            Item::transfer_limited::<R>(input, &mut taken, self.settings.silo_transfer_size);
-
-            if !taken.is_invalid() {
-                silo.stack.push(taken);
-            }
-
-            if let Some(last) = silo.stack.last_mut() {
-                let predicate = hatches[silo.output].buffer.can_accumulate_from::<R>(last);
-
-                if predicate {
-                    let output = &mut hatches[silo.output].buffer;
-                    Item::transfer_limited::<R>(last, output, self.settings.silo_transfer_size);
-
-                    if last.is_invalid() {
-                        silo.stack.pop().unwrap();
-                    }
-                }
-            }
-        }
-
+        handle_silos::<R>(hatches, silos, settings);
 
         *tick += 1;
     }
