@@ -1,6 +1,7 @@
 extends Control
 
 @onready var player: CharacterBody3D = $"../Player"
+@onready var actor_handler: = $"../Player/Actor Handler"
 @onready var top_label = $"PanelContainer/VBoxContainer/Label"
 @onready var recipe_label = $"PanelContainer/VBoxContainer/Label2"
 @onready var debug_info_label = $"Debug Label"
@@ -28,4 +29,4 @@ func _process(delta: float) -> void:
 			debug_info_label.show()
 			debug_info_label.text = obj.get_debug_info()
 			
-	selected_actor_label.text = player.ActorType.keys()[player.selected_actor_type]
+	selected_actor_label.text = actor_handler.ActorType.keys()[actor_handler.selected_actor_type]

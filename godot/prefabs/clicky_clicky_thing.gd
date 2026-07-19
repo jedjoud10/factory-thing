@@ -5,6 +5,7 @@ var duration = 0.1
 
 # https://www.reddit.com/r/godot/comments/13uao7l/current_way_in_godot_4_to_find_to_find_player/
 @onready var player = get_tree().get_nodes_in_group("player")[0]  
+@onready var player_hover_handler = player.find_child("Hover Handler")
 
 func _on_body_entered(body: Node3D) -> void:
 	if (attached_rb != null):
@@ -17,8 +18,8 @@ func _on_body_entered(body: Node3D) -> void:
 		tween.tween_property(body, "global_basis", Basis.IDENTITY, duration).set_trans(Tween.TRANS_SINE)
 		attached_rb = (body as RigidBody3D)
 		
-		if (player.rigidbody_hover_target == attached_rb):
-			player.rigidbody_hover_target = null
+		if (player_hover_handler.rigidbody_hover_target == attached_rb):
+			player_hover_handler.rigidbody_hover_target = null
 			
 		if (get_parent() is MachineNode):
 			(get_parent() as MachineNode).attach_clicky_thing()

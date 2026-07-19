@@ -1,19 +1,11 @@
 [gd_scene format=3 uid="uid://4mriakcgcfxw"]
 
-[ext_resource type="Script" uid="uid://dd80ka5o7abib" path="res://player/player.gd" id="1_0f027"]
+[ext_resource type="PackedScene" uid="uid://cdxdqbjueofdk" path="res://player/player.tscn" id="1_hq1ik"]
 [ext_resource type="PackedScene" uid="uid://tutiyjxgw5nq" path="res://actors/machine.tscn" id="2_2c62f"]
 [ext_resource type="PackedScene" uid="uid://cgeue606n6k8p" path="res://prefabs/modular_component.tscn" id="2_hq1ik"]
 [ext_resource type="PackedScene" uid="uid://b4tn4nt3etsyl" path="res://actors/infinite_generator.tscn" id="3_gyfs4"]
 [ext_resource type="PackedScene" uid="uid://c27tvta2y48dy" path="res://actors/silo.tscn" id="5_8mm7a"]
 [ext_resource type="PackedScene" uid="uid://dkqbw22vbh5ys" path="res://ui/user_interface.tscn" id="5_hq1ik"]
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_o3jxj"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_0f027"]
-
-[sub_resource type="SphereMesh" id="SphereMesh_2c62f"]
-radius = 0.05
-height = 0.1
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_0f027"]
 size = Vector3(50, 1, 50)
@@ -63,27 +55,8 @@ script/source = "extends Node3D
 
 [node name="Main" type="Node3D" unique_id=782682801]
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=715877920 groups=["player"]]
+[node name="Player" parent="." unique_id=1284926500 instance=ExtResource("1_hq1ik")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2576691, 1.4770802, 0)
-script = ExtResource("1_0f027")
-sens = 0.002
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1152703165]
-shape = SubResource("CapsuleShape3D_o3jxj")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Player" unique_id=1928367626]
-mesh = SubResource("CapsuleMesh_0f027")
-
-[node name="Camera3D" type="Camera3D" parent="Player" unique_id=1119898470]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5852772, 0)
-
-[node name="RayCast3D" type="RayCast3D" parent="Player/Camera3D" unique_id=597769698]
-transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, -0.6309064)
-target_position = Vector3(0, -10, 0)
-hit_back_faces = false
-
-[node name="Select Indicator" type="MeshInstance3D" parent="Player" unique_id=300969486]
-mesh = SubResource("SphereMesh_2c62f")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1627863084]
 

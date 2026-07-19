@@ -674,11 +674,22 @@ impl<R: registry::Registry> Simulation<R> {
         // remove associated wires
         self.wires.retain(|_, w| !(w.a == key || w.b == key));
     } 
+
+    pub fn are_poles_connected(&self, a: PoleKey, b: PoleKey) -> bool {
+        self.wires.values().any(|wire| (wire.a == a && wire.b == b) || (wire.a == b && wire.b == a))
+    }
+
+    pub fn are_hatches_connected(&self, a: HatchKey, b: HatchKey) -> bool {
+        self.belts.values().any(|belt| (belt.belt_start == a && belt.belt_end == b) || (belt.belt_start == b && belt.belt_end == a))
+    }
+
+    pub fn is_hatch_connected(&self, hatch: HatchKey) -> bool {
+        self.belts.values().any(|belt| belt.belt_start == hatch || belt.belt_end == hatch)
+    }
     
     pub fn add_wire_with_max_flow(&mut self, a: PoleKey, b: PoleKey, max_flow: LoadUnit) -> WireKey {
-        if self.wires.values().any(|wire| (wire.a == a && wire.b == b) || (wire.b == a && wire.a == b)) {
-            panic!("cannot add duplicate wire");
-        }
+        assert!(!self.are_poles_connected(a, b), "cannot add duplicate wire");
+        assert!(a != b, "wire poles must not be identical");
 
         self.wires.insert(Wire {
             a, b,
@@ -690,8 +701,6 @@ impl<R: registry::Registry> Simulation<R> {
 
     // TODO: add wire tiers
     pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
-        assert!(a != b);
-
         self.add_wire_with_max_flow(a, b, LoadUnit::MAX)
     }
 
@@ -707,12 +716,10 @@ impl<R: registry::Registry> Simulation<R> {
 
     // TODO: add belt tiers
     pub fn add_belt_2(&mut self, output_hatch: HatchKey, input_hatch: HatchKey, length: BeltSize) -> BeltKey {
-        assert!(output_hatch != input_hatch);
+        assert!(!self.are_hatches_connected(output_hatch, input_hatch), "cannot add duplicate belt");
+        assert!(output_hatch != input_hatch, "belt hatches must not be identical");
 
-        let buffer_length = match length {
-            BeltSize::BufferLength(x) => x as f32,
-            BeltSize::WorldLength(x) => x * self.settings.belt_buffer_scaling_factor,
-        }.ceil().max(2f32) as usize;
+        let buffer_length = self.calculate_belt_buffer_size(length);
 
         self.belts.insert(Belt {
             belt_start: output_hatch,
@@ -722,6 +729,13 @@ impl<R: registry::Registry> Simulation<R> {
         })
     }
 
+    pub fn calculate_belt_buffer_size(&self, length: BeltSize) -> usize {
+        match length {
+            BeltSize::BufferLength(x) => x as f32,
+            BeltSize::WorldLength(x) => x * self.settings.belt_buffer_scaling_factor,
+        }.ceil().max(2f32) as usize
+    }
+    
     pub fn remove_belt(&mut self, belt: BeltKey) {
         self.belts.remove(belt);
     }

@@ -163,6 +163,8 @@ For the coolness effect these should be very big (i.e room sized at minimum) bec
 Something something system similar to AE2 where you can "digitalize" your storage. No auto-crafting though as that's already implemented by, well, the factory.
 Maybe digital storage could be used in the same way that storage drones work in Factorio? (i.e only used to move items in / out of a shared place without needing to resort to belts)
 
+When digitalizing resource, they *MUST* be consumed in order not to duplicate them.
+
 ## Thinking
 In the Create Mod, machines are "shapeless". They do their functions on the items below them, in depots or belts. Ex: The `mechanical press`, converts `ingots` into `plates`, but it *also* has other use cases
 
@@ -201,12 +203,25 @@ Qs:
 - What if the miner took more than just power? What about pressurized air? 
 - Would the resource patches run out eventually? 
 
-### Extension if using Multiblocks / Modular Components:
-The drill head could be a modular component that can be replaced after enough wear. There can be multiple tiers depending on their hardness and maximum depth they can sustain
+- *Extension if using Multiblocks / Modular Components*: The drill head could be a modular component that can be replaced after enough wear. There can be multiple tiers depending on their hardness and maximum depth they can sustain
 
 
-## Satellite Scanning Idea
+## Satellites:
 *(heavily and I mean HEAVILY inspired from the Advanced Rocketry minecraft mod)*
 
 you um make rockets. ksp style. but like in first person. and you actually have to craft the rocket components yourself. you make satellites. launch satellites. they do surface scanning. tell you where good ore is. or maybe makes the map more discoverable.
 oooo what if there are different types of scanners you can put on satellites??
+
+## Signals:
+## Low Frequency Stuff
+- can be used to monitor / communicate with satellite, if implemented
+- can be used for underground resource scanning (make that make sense wtv)
+
+## High Frequency Stuff
+If we ever implement HF signals (for processing / remote control / wireless communication), we should try to emulate simple wave propagation throughout the wire.
+- signal quality would decrease / become noisier near machines that emit a lot of RF noise.
+    - signal wires could have "shielding" that protects the signal integrity
+- signal waves throughout the wire can get reflected / refracted depending on some "impedance-like" value of the wire. not trying to make it realistic but kinda realistic and kinda fun to play with
+- can have radio waves that propagate throughout the world for wireless communication
+    - with *Computing & Digitalization* this could allow for some sort of resource teleportation as you would be able to digitalize resources
+        - it would be cool if, depending on radio signal integrity, the teleported item has chances to come out "malrepresented". something something molecular composition gets fucked during transfer. sounds cool....

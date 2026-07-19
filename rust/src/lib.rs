@@ -15,6 +15,8 @@ pub use handle::*;
 pub use items::*;
 pub use simulation::*;
 
+use crate::nodes::HatchNode;
+use crate::nodes::PoleNode;
 use crate::registry::DefaultRegistry;
 
 struct MyExtension;
@@ -38,14 +40,10 @@ pub struct FactoryManager {
 #[godot_api]
 impl INode3D for FactoryManager {
     fn init(base: Base<Node3D>) -> Self {
-        // FIXME: remove this by adding separate const settings for test cases and default cases 
-        let mut sim =  Simulation::<DefaultRegistry>::default();
-        sim.settings.machine_require_clicky_thing_attached = true;
-
         Self {
             base,
             real_time: 0f32,
-            game: sim,
+            game: Simulation::<DefaultRegistry>::default(),
             godot_item_models_registry: HashMap::default(),
             godot_item_materials_registry: HashMap::default(),
             item_prefab: Gd::default()
@@ -70,5 +68,24 @@ impl INode3D for FactoryManager {
     fn physics_process(&mut self, _delta: f32) {
         // TODO: move to custom loop
         self.game.tick();
+    }
+}
+
+
+#[godot_api]
+impl FactoryManager {
+    #[func]
+    fn are_poles_connected(&mut self, fst: Gd<PoleNode>, snd: Gd<PoleNode>) -> bool {
+        self.game.are_poles_connected(fst.bind().key, snd.bind().key)
+    }
+
+    #[func]
+    fn are_hatches_connected(&mut self, fst: Gd<HatchNode>, snd: Gd<HatchNode>) -> bool {
+        self.game.are_hatches_connected(fst.bind().key, snd.bind().key)
+    }
+
+    #[func]
+    fn is_hatch_connected(&mut self, hatch: Gd<HatchNode>) -> bool {
+        self.game.is_hatch_connected(hatch.bind().key)
     }
 }

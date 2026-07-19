@@ -63,13 +63,16 @@ impl INode3D for BeltNode {
         let root = window.get_child(0).unwrap();
         let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
         let bound = factory_manager.bind();
+        let game = &bound.game;
 
         // https://github.com/JL-squared/Factory-ECS-Prototype/blob/main/Assets/Actors/Systems/VisualSystems.cs#L625
-        let belt = &bound.game.belts[self.key];
+        let belt = &game.belts[self.key];
         let last_transfer_tick = belt.last_transfer_tick;
 
-        let belt_ticks_between_transfers = bound.game.settings.belt_ticks_between_transfers;
-        let diff = (bound.game.tick - last_transfer_tick) as f32 / belt_ticks_between_transfers as f32;
+        let belt_ticks_between_transfers = game.settings.belt_ticks_between_transfers;
+        let diff = (game.tick - last_transfer_tick) as f32 / belt_ticks_between_transfers as f32;
+
+        // let did_transfer_this_tick = last_transfer_tick == game.tick;
 
         let tick_interpolation_factor = diff;
         let tick_interpolation_factor = tick_interpolation_factor.clamp(0f32, 1f32);
