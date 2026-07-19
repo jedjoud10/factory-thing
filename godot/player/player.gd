@@ -65,6 +65,7 @@ func _physics_process(delta: float) -> void:
 		force += -rigidbody_hover_target.linear_velocity * delta * 200
 		rigidbody_hover_target.apply_force(force)
 	
+var highlighted_actor: Node3D = null
 
 func _process(delta: float) -> void:
 	accumulated_mouse.y = clamp(accumulated_mouse.y, -PI * 0.5, PI * 0.5)
@@ -76,15 +77,65 @@ func _process(delta: float) -> void:
 	# TODO: there's still jittery rotation happening here, probably because of player rotation interpolation
 	rotation = Vector3(0, y, 0)
 	
+	if (hologram_actor != null):
+		hologram_actor.hide()
+		match selected_actor_type:
+			ActorType.Wire:					
+				if (fst_selected_actor != null):
+					hologram_actor.show()
+					var node_p1 = (fst_selected_actor.get_node("Connector") as Node3D).global_position
+					
+					var node_p2 = -camera.global_basis.z + camera.global_position
+					if (raycaster.get_collider() != null):
+						var parent = raycaster.get_collider().get_parent()		
+						if (parent is PoleNode and parent != fst_selected_actor):
+							node_p2 = (parent.get_node("Connector") as Node3D).global_position
+					
+					var d = node_p1.distance_to(node_p2)
+					var pos = (node_p1 + node_p2) * 0.5
+					hologram_actor.look_at_from_position(pos, node_p1)
+					var mesh = hologram_actor.get_node("MeshInstance3D") as Node3D 
+					mesh.scale.y = d * 0.5
+			_:
+				hologram_actor.show()
+				pass
+	
 	
 	# moves the select indicator to where the raycast hit (if it did hit)
 	if (raycaster.get_collider() == null):
 		indicator.hide()
+		
+		if (highlighted_actor != null):
+				highlighted_actor.propagate_call("set", ["material_overlay", null])
+				highlighted_actor = null
 	else:
 		indicator.show()
 		indicator.global_position = raycaster.get_collision_point()
 		
-	
+		var parent = raycaster.get_collider().get_parent()
+		if (parent.is_in_group("actors")):
+			if (highlighted_actor == null):
+				highlighted_actor = parent;
+			elif highlighted_actor != parent:
+				highlighted_actor.propagate_call("set", ["material_overlay", null])
+				highlighted_actor = parent;
+			highlighted_actor.propagate_call("set", ["material_overlay", preload("res://materials/highlight.tres")])
+		else:
+			if (highlighted_actor != null):
+				highlighted_actor.propagate_call("set", ["material_overlay", null])
+				highlighted_actor = null
+		
+		if (hologram_actor_type != selected_actor_type):
+			recreate_hologram_actor()
+		
+		if (hologram_actor != null):
+			match selected_actor_type:
+				ActorType.Wire:			
+					pass
+				_:
+					hologram_actor.global_position = get_actor_position_from_raycast()
+		else:
+			recreate_hologram_actor()
 	pass
 
 enum ActorType {
@@ -95,9 +146,12 @@ enum ActorType {
 	Belt
 }
 
+func get_actor_position_from_raycast() -> Vector3:
+	return raycaster.get_collision_point() + Vector3(0, 0.5, 0)
 
 var selected_actor_type: ActorType = ActorType.Machine
-
+var hologram_actor: Node3D = null
+var hologram_actor_type: ActorType = ActorType.Machine
 var fst_selected_actor: Node3D = null
 var snd_selected_actor: Node3D = null
 
@@ -148,7 +202,13 @@ func _input(event):
 			print("selected first actor")
 		else:
 			snd_selected_actor = get_looking_at_actor()
-			print("selected second actor")
+			if (snd_selected_actor == fst_selected_actor):
+				print("cannot select same actor twice. resetting")
+				snd_selected_actor = null
+				fst_selected_actor = null
+			else:
+				print("selected second actor")
+				place_actor()
 	elif event is InputEventMouseMotion:
 		accumulated_mouse += event.relative * sens
 		
@@ -158,6 +218,39 @@ var silo_scene = preload("res://actors/silo.tscn")
 var wire_scene = preload("res://actors/wire.tscn")
 var belt_scene = preload("res://actors/belt.tscn")
 
+
+func recreate_hologram_actor() -> void:
+	if (hologram_actor != null):
+		hologram_actor.queue_free()
+		hologram_actor = null
+	
+	hologram_actor_type = selected_actor_type
+	match selected_actor_type:
+		ActorType.Machine:
+			hologram_actor = machine_scene.instantiate()
+		ActorType.PowerPole:
+			hologram_actor = power_pole_scene.instantiate()
+		ActorType.Silo:
+			hologram_actor = silo_scene.instantiate()
+		ActorType.Wire:
+			if ((fst_selected_actor as PoleNode) != null):
+				hologram_actor = wire_scene.instantiate()
+			else:
+				return
+		ActorType.Belt:
+			return
+			
+
+	print("recreate hologram actor")
+	hologram_actor.find_child("StaticBody3D").process_mode = Node.PROCESS_MODE_DISABLED
+	hologram_actor.propagate_call("set", ["process_mode", Node.PROCESS_MODE_DISABLED])
+	hologram_actor.propagate_call("set", ["collision_mask", 0])
+	hologram_actor.propagate_call("set", ["material_override", preload("res://materials/hologram.tres")])
+	
+	if ("hologram" in hologram_actor):
+		hologram_actor.hologram = true
+	
+	get_tree().root.get_child(0).add_child(hologram_actor)
 
 		
 func place_actor() -> void:
@@ -183,7 +276,7 @@ func place_actor() -> void:
 	
 	var node = instance as Node3D
 	var position = Vector3.ZERO
-	
+		
 	match selected_actor_type:
 		ActorType.Wire:
 			var node_p1 = (fst_selected_actor.get_node("Connector") as Node3D).global_position
@@ -192,7 +285,6 @@ func place_actor() -> void:
 			var pos = (node_p1 + node_p2) * 0.5
 			position = pos
 			node.look_at_from_position(pos, node_p1)
-			
 			var col_shape = node.get_node("StaticBody3D/CollisionShape3D") as CollisionShape3D
 			col_shape.shape = col_shape.shape.duplicate()
 			(col_shape.shape as BoxShape3D).size.z = d
@@ -230,7 +322,7 @@ func place_actor() -> void:
 			fst_selected_actor = null
 			snd_selected_actor = null
 		_:
-			position = raycaster.get_collision_point() + Vector3(0, 0.5, 0)
+			position = get_actor_position_from_raycast()
 	
 	get_tree().root.get_child(0).add_child(instance)
 	node.global_position = position

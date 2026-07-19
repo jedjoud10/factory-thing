@@ -10,6 +10,8 @@ pub struct WireNode {
     pole_1_ref: Option<Gd<PoleNode>>,
     #[export]
     pole_2_ref: Option<Gd<PoleNode>>,
+    #[export]
+    hologram: bool,
 }
 
 #[godot_api]
@@ -20,10 +22,15 @@ impl INode3D for WireNode {
             key: WireKey::null(),
             pole_1_ref: None,
             pole_2_ref: None,
+            hologram: false
         }
     }
 
     fn ready(&mut self) {
+        if self.hologram {
+            return;
+        }
+
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
@@ -45,6 +52,10 @@ impl INode3D for WireNode {
     }
 
     fn exit_tree(&mut self) {
+        if self.hologram {
+            return;
+        }
+
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
