@@ -4,16 +4,19 @@ extends Node3D
 @onready var raycaster: RayCast3D = $"../Camera3D/RayCast3D"
 @onready var manager: FactoryManager = get_tree().root.get_child(0).find_child("FactoryManager")
 
+@export var actors: Array[ActorResource]
+
 var highlighted_actor: Node3D = null
-var machine_scene = preload("res://actors/machine.tscn")
-var power_pole_scene = preload("res://actors/pole.tscn")
-var silo_scene = preload("res://actors/silo.tscn")
-var wire_scene = preload("res://actors/wire.tscn")
-var belt_scene = preload("res://actors/belt.tscn")
+var selected_actor_resource: ActorResource = null
+var hologram_actor_resource: ActorResource = null
+var hologram_actor: Node3D = null
+var fst_selected_actor: Node3D = null
+var snd_selected_actor: Node3D = null
+var selected_actor_index = 0
 
 func _process(delta: float) -> void:
 	# returns null if raycast misses
-	var possible_actor = null	
+	var possible_actor = null
 	if (raycaster.get_collider() != null):
 		possible_actor = raycaster.get_collider().get_parent()
 	
@@ -36,27 +39,23 @@ func _process(delta: float) -> void:
 	
 	# holograms are only visible when we have a target point where we can place actor
 	if (raycaster.get_collider() != null):
-		if (hologram_actor_type != selected_actor_type or hologram_actor == null):
+		if (hologram_actor_resource != selected_actor_resource or hologram_actor == null):
 			recreate_hologram_actor()
 		
 		
 	update_hologram_if_any()
 		
-enum ActorType {
-	Machine,
-	PowerPole,
-	Silo,
-	Wire,
-	Belt
-}
-
 func update_hologram_if_any() -> void:
 	if (hologram_actor != null):
 		hologram_actor.hide()
 		
+		if (selected_actor_resource == null):
+			return;
+			
 		# only update global position when we are not a wire or belt (because those are automatically handled)
+		var selected_actor_type = selected_actor_resource.type
 		match selected_actor_type:
-			ActorType.Wire:					
+			ActorResource.ActorType.Wire:					
 				if (fst_selected_actor != null):
 					hologram_actor.show()
 					var node_p1 = (fst_selected_actor.get_node("Connector") as Node3D).global_position
@@ -72,19 +71,30 @@ func update_hologram_if_any() -> void:
 					hologram_actor.look_at_from_position(pos, node_p1)
 					var mesh = hologram_actor.get_node("MeshInstance3D") as Node3D 
 					mesh.scale.y = d * 0.5
+			ActorResource.ActorType.Belt:					
+				if (fst_selected_actor != null):
+					hologram_actor.show()
+					var node_p1 = (fst_selected_actor as Node3D).global_position
+					
+					var node_p2 = -camera.global_basis.z + camera.global_position
+					if (raycaster.get_collider() != null):
+						var parent = raycaster.get_collider().get_parent()		
+						if (parent is HatchNode and parent != fst_selected_actor):
+							node_p2 = (parent as Node3D).global_position
+					
+					var d = node_p1.distance_to(node_p2)
+					var pos = (node_p1 + node_p2) * 0.5
+					hologram_actor.look_at_from_position(pos, node_p1)
+					var mesh = hologram_actor.get_node("Belt Visual") as Node3D 
+					mesh.scale.z = d * 0.5
 			_:
-				hologram_actor.show()
-				hologram_actor.global_position = get_actor_position_from_raycast()
+				if (raycaster.get_collider() != null):
+					hologram_actor.show()
+					hologram_actor.global_position = get_actor_position_from_raycast()
 				pass
 
 func get_actor_position_from_raycast() -> Vector3:
 	return round(raycaster.get_collision_point() + Vector3(0, 0.5, 0))
-
-var selected_actor_type: ActorType = ActorType.Machine
-var hologram_actor: Node3D = null
-var hologram_actor_type: ActorType = ActorType.Machine
-var fst_selected_actor: Node3D = null
-var snd_selected_actor: Node3D = null
 
 func get_looking_at_actor() -> Node3D:
 	if (raycaster.get_collider() != null):
@@ -102,66 +112,77 @@ func get_fst_snd_actor() -> Node3D:
 		return null
 
 func _input(event):
+	var actor_index_offset = 0
+	
 	if event.is_action_pressed("place_actor"):
-		place_actor()
+		if (selected_actor_resource != null):
+			var selected_actor_type = selected_actor_resource.type
+			match selected_actor_type:
+				ActorResource.ActorType.Wire:					
+					select_actor()
+				ActorResource.ActorType.Belt:					
+					select_actor()
+				_:
+					place_actor()
+		
 	elif event.is_action_pressed("remove_actor"):
 		remove_actor()
-	elif event.is_action_pressed("select_machine_as_actor"):
-		print("select machine as actor")
-		selected_actor_type = ActorType.Machine
-	elif event.is_action_pressed("select_pole_as_actor"):
-		print("select pole as actor")
-		selected_actor_type = ActorType.PowerPole
-	elif event.is_action_pressed("select_silo_as_actor"):
-		print("select silo as actor")
-		selected_actor_type = ActorType.Silo
-	elif event.is_action_pressed("select_wire_as_actor"):
-		print("select wire as actor")
+	elif event.is_action_pressed("scroll_actor_left"):
 		fst_selected_actor = null
 		snd_selected_actor = null
-		selected_actor_type = ActorType.Wire	
-	elif event.is_action_pressed("select_belt_as_actor"):
-		print("select belt as actor")
+		actor_index_offset = -1
+	elif event.is_action_pressed("scroll_actor_right"):
 		fst_selected_actor = null
 		snd_selected_actor = null
-		selected_actor_type = ActorType.Belt	
-	elif event.is_action_pressed("select_actor"):
-		if (fst_selected_actor == null):
-			fst_selected_actor = get_fst_snd_actor()
-			
-			if (fst_selected_actor != null):
-				print("selected first actor")
+		actor_index_offset = 1
+	elif event.is_action_pressed("toggle_actor_building"):
+		if (selected_actor_resource == null):
+			selected_actor_resource = actors[selected_actor_index]
 		else:
-			snd_selected_actor = get_fst_snd_actor()
-			if (snd_selected_actor == fst_selected_actor):
-				print("cannot select same actor twice. resetting")
-				snd_selected_actor = null
-				fst_selected_actor = null
-			elif (snd_selected_actor != null):
-				print("selected second actor")
-				place_actor()
+			selected_actor_resource = null
+	if (actor_index_offset != 0):
+		selected_actor_index = posmod(selected_actor_index+actor_index_offset, len(actors))
+		if (selected_actor_resource != null):
+			selected_actor_resource = actors[selected_actor_index]
+			print("new actor resource: ", selected_actor_resource.scene.resource_path)
+
+func select_actor() -> void:
+	if (fst_selected_actor == null):
+		fst_selected_actor = get_fst_snd_actor()
+		if (fst_selected_actor != null):
+			print("selected first actor")
+	else:
+		snd_selected_actor = get_fst_snd_actor()
+		if (snd_selected_actor == fst_selected_actor):
+			print("cannot select same actor twice. resetting")
+			snd_selected_actor = null
+			fst_selected_actor = null
+		elif (snd_selected_actor != null):
+			print("selected second actor")
+			place_actor()	
 
 func recreate_hologram_actor() -> void:
+	if (selected_actor_resource == null):
+		return
+	
 	if (hologram_actor != null):
 		hologram_actor.queue_free()
 		hologram_actor = null
 	
-	hologram_actor_type = selected_actor_type
-	match selected_actor_type:
-		ActorType.Machine:
-			hologram_actor = machine_scene.instantiate()
-		ActorType.PowerPole:
-			hologram_actor = power_pole_scene.instantiate()
-		ActorType.Silo:
-			hologram_actor = silo_scene.instantiate()
-		ActorType.Wire:
+	hologram_actor_resource = selected_actor_resource
+	match selected_actor_resource.type:
+		ActorResource.ActorType.Wire:
 			if ((fst_selected_actor as PoleNode) != null):
-				hologram_actor = wire_scene.instantiate()
+				hologram_actor = selected_actor_resource.scene.instantiate()
 			else:
 				return
-		ActorType.Belt:
-			return
-			
+		ActorResource.ActorType.Belt:
+			if ((fst_selected_actor as HatchNode) != null):
+				hologram_actor = selected_actor_resource.scene.instantiate()
+			else:
+				return
+		_:
+			hologram_actor = selected_actor_resource.scene.instantiate()
 
 	print("recreate hologram actor")
 	hologram_actor.find_child("StaticBody3D").process_mode = Node.PROCESS_MODE_DISABLED
@@ -176,16 +197,11 @@ func recreate_hologram_actor() -> void:
 
 		
 func place_actor() -> void:
-	var instance = null
+	if (selected_actor_resource == null):
+		return
 	
-	match selected_actor_type:
-		ActorType.Machine:
-			instance = machine_scene.instantiate()
-		ActorType.PowerPole:
-			instance = power_pole_scene.instantiate()
-		ActorType.Silo:
-			instance = silo_scene.instantiate()
-		ActorType.Wire:
+	match selected_actor_resource.type:
+		ActorResource.ActorType.Wire:
 			if ((fst_selected_actor as PoleNode) == null || (snd_selected_actor as PoleNode) == null):
 				print("need to select two poles to wire up")
 				return
@@ -194,8 +210,7 @@ func place_actor() -> void:
 				print("cannot place wire")
 				return
 				
-			instance = wire_scene.instantiate()
-		ActorType.Belt:
+		ActorResource.ActorType.Belt:
 			if ((fst_selected_actor as HatchNode) == null || (snd_selected_actor as HatchNode) == null):
 				print("need to select two hatches to belt up")
 				return
@@ -211,14 +226,14 @@ func place_actor() -> void:
 			if (manager.is_hatch_connected(snd_selected_actor as HatchNode)):
 				print("cannot place belt")
 				return
-				
-			instance = belt_scene.instantiate()
+		_:
+			pass
 	
-	var node = instance as Node3D
+	var node = selected_actor_resource.scene.instantiate() as Node3D
 	var position = Vector3.ZERO
 		
-	match selected_actor_type:
-		ActorType.Wire:
+	match selected_actor_resource.type:
+		ActorResource.ActorType.Wire:
 			var node_p1 = (fst_selected_actor.get_node("Connector") as Node3D).global_position
 			var node_p2 = (snd_selected_actor.get_node("Connector") as Node3D).global_position
 			var d = node_p1.distance_to(node_p2)
@@ -239,7 +254,7 @@ func place_actor() -> void:
 			
 			fst_selected_actor = null
 			snd_selected_actor = null
-		ActorType.Belt:
+		ActorResource.ActorType.Belt:
 			var node_p1 = (fst_selected_actor as Node3D).global_position
 			var node_p2 = (snd_selected_actor as Node3D).global_position
 			var d = node_p1.distance_to(node_p2)
@@ -264,7 +279,7 @@ func place_actor() -> void:
 		_:
 			position = get_actor_position_from_raycast()
 	
-	get_tree().root.get_child(0).add_child(instance)
+	get_tree().root.get_child(0).add_child(node)
 	node.global_position = position
 	
 	

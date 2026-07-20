@@ -51,6 +51,20 @@ impl INode3D for WireNode {
         self.key = bound.game.add_wire(pole_1_key, pole_2_key);
     }
 
+    // TODO: not optimized, should use a callback with user data (godot nodes) instead
+    fn physics_process(&mut self, _delta: f32) {
+        let tree = self.base().get_tree();
+        let window = tree.get_root().unwrap();
+        let root = window.get_child(0).unwrap();
+        let factory_manager = root.get_node_as::<FactoryManager>("FactoryManager");
+        let bound = factory_manager.bind();
+        let sim = &bound.game;
+
+        if !sim.wires.contains_key(self.key) {
+            self.base_mut().queue_free();
+        }
+    }
+
     fn exit_tree(&mut self) {
         if self.hologram {
             return;

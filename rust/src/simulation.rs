@@ -112,6 +112,7 @@ pub struct Silo {
 
 pub struct Settings {
     pub wire_damage_per_tick: Option<u8>,
+    pub wire_max_flow: LoadUnit,
     pub belt_buffer_scaling_factor: f32,
     pub belt_ticks_between_transfers: u64,
     pub belt_transfer_size: u8,
@@ -123,6 +124,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             wire_damage_per_tick: None,
+            wire_max_flow: LoadUnit::MAX,
             belt_buffer_scaling_factor: 2f32,
             belt_ticks_between_transfers: 16,
             belt_transfer_size: 1,
@@ -177,7 +179,6 @@ fn handle_silos<R: registry::Registry>(hatches: &mut SlotMap<HatchKey, Hatch>, s
         }
     }
 }
-
 
 fn handle_machines<R: registry::Registry>(machines: &mut SlotMap<MachineKey, Machine>, poles: &mut SlotMap<PoleKey, Pole>, hatches: &mut SlotMap<HatchKey, Hatch>, settings: &mut Settings) {
     for machine in machines.values_mut() {
@@ -701,7 +702,7 @@ impl<R: registry::Registry> Simulation<R> {
 
     // TODO: add wire tiers
     pub fn add_wire(&mut self, a: PoleKey, b: PoleKey) -> WireKey {
-        self.add_wire_with_max_flow(a, b, LoadUnit::MAX)
+        self.add_wire_with_max_flow(a, b, self.settings.wire_max_flow)
     }
 
     pub fn remove_wire(&mut self, wire: WireKey) {

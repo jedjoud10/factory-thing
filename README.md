@@ -38,6 +38,14 @@ Machines can have different supported "power tiers". If you have a high-power ne
 - High power networks have lower losses due to resistance over distance. Can incentivize player to built long powerlines using higher power components
 - Can do something about power distribution stations that step down power and do some other thing alongside that
 
+High voltage networks can have a phase associated with them. When you try to connect two networks together, their phase must match up
+
+High voltage networks can have a frequency asssociated with them. This can be changed depending on the generator type / transformers
+
+There could be a graph that dictates power loss in relation to power frequency. For example, at 123Hz, power loss in cables is minimal.
+
+Nothing states that the "optimal frequency" is static. It can change with other parameters. For example, there could be an optimal frequency for a network of a specific size, but not for other sizes (something something similar to impedence matching)
+
 # Ideas
 ## Multiblocks / Modular Components
 ### Building
@@ -48,8 +56,14 @@ For example, to create a "furnace" you could do the following:
 - Build the door & latching mechanism & whatever
 - Build the exterior
 
+Alternatively, machines can work straight out of the box, but they can be *upgraded* by adding components onto them and / or swapping out the default components
+
 ### Stat Modifications
-This can be extended to other machines where each individual component (either structural, mechanical, electrical) serves a specific purpose and *does* affect how the machine functions. This should incentivize the player *and* give the player the ability to scale vertically by upgrading machines instead of adding more machines. Plus, each of these component archetypes could have a specific stat they are tied to, and upgrading one increases / decreases that stat, depending on which means "better". Example:
+This can be extended to other machines where each individual component (either structural, mechanical, electrical) serves a specific purpose and *does* affect how the machine functions.
+
+This should incentivize the player *and* give the player the ability to scale vertically by upgrading machines instead of adding more machines.
+
+Plus, each of these component archetypes could have a specific stat they are tied to, and upgrading one increases / decreases that stat, depending on which means "better". Example:
 - efficiency. "how much power this machine consumes at idle / full power"
 - speed.
 - (specific to furnaces machines) max temperature. certain recipes could be locked behind a minimum temperature, and upgrading certain parts of the furnace might help it reach higher temperatures
@@ -75,6 +89,18 @@ Another bonus that we get from this sort of system is replaceable parts. If a ce
 - Placing a specific modular component does not reward the player in any-way. It is simply a "task" for them to do during the crafting process.
 Like Michatai said:
 > it just locks in the future placements of the other components
+
+### Archetypes
+3 types of modular components: power, control, ((rotational))
+- Power: the thing that delivers power / electricity to the system
+    - can be a power pole, that lets the machine to connect to the power network
+    - can be a stand-alone generator of some kind (solar panel, battery, infinite generator)
+
+For example, imagine a machine that requires BURSTS of energy to finish crafting, but you do not want / do not have large scale capacitors yet. You can have the following configuration:
+- 1 power pole module on the machine
+- A multitude of capacitor modules
+
+Or, if you have a machine that requires a *lot* of power, instead of upgrading your network system to higher tier cables, you can just add multiple power pole modules to the machine and feed each of those individually (like how you can add more MV power ports on a GregTech machine to feed it more power instead of changing your network to be an HV network)
 
 ## Macro Level Puzzle
 Again, instead of treating machines as self-contained black boxes, we can instead "peek" onto what is happening inside of them.
@@ -225,3 +251,19 @@ If we ever implement HF signals (for processing / remote control / wireless comm
 - can have radio waves that propagate throughout the world for wireless communication
     - with *Computing & Digitalization* this could allow for some sort of resource teleportation as you would be able to digitalize resources
         - it would be cool if, depending on radio signal integrity, the teleported item has chances to come out "malrepresented". something something molecular composition gets fucked during transfer. sounds cool....
+
+
+## Molten Liquids Container (TinkerConstructs style)
+- You can have a container / fluid tank that can contain molten liquids
+- You insert liquids at the top
+- You pull liquids from the bottom
+- Liquids that touch each other interact together to form a new liquid
+- Liquids have differing densities, lighter liquids go the top, denser liquids go to the bottom
+
+- You can add a "mixer" to to the container so that it tries to mix liquids together
+- You can add a "scraper" to to the container so that it removes the top layer of semi-liquid semi-solid slag
+
+- Some liquids cannot mix together
+- Some liquids love to mix together
+
+- For some liquids to mix, the container must be heated to the appropriate temperature ranges (greater than mixing recipe *min* and less than mixing recipe *max*) 

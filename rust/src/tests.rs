@@ -89,6 +89,7 @@ mod test_registry {
                 belt_transfer_size: 1,
                 silo_transfer_size: 1,
                 machine_require_clicky_thing_attached: false,
+                wire_max_flow: crate::LoadUnit::MAX,
             }
         }
     }

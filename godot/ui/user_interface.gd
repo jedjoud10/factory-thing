@@ -29,4 +29,7 @@ func _process(delta: float) -> void:
 			debug_info_label.show()
 			debug_info_label.text = obj.get_debug_info()
 			
-	selected_actor_label.text = actor_handler.ActorType.keys()[actor_handler.selected_actor_type]
+	if (actor_handler.selected_actor_resource != null):
+		selected_actor_label.text = ActorResource.ActorType.keys()[actor_handler.selected_actor_resource.type]
+	else:
+		selected_actor_label.text = "Disabled"

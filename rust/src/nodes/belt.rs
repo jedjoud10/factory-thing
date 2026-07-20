@@ -11,8 +11,11 @@ pub struct BeltNode {
     belt_end_hatch_ref: Option<Gd<HatchNode>>,
 
     items: Vec<Option<Gd<Node3D>>>,
-    
     key: BeltKey,
+
+    #[export]
+    hologram: bool,
+    
 }
 
 #[godot_api]
@@ -23,11 +26,16 @@ impl INode3D for BeltNode {
             belt_start_hatch_ref: None,
             belt_end_hatch_ref: None,
             items: Vec::new(),
-            key: BeltKey::null()
+            key: BeltKey::null(),
+            hologram: false,
         }
     }
 
     fn ready(&mut self) {
+        if self.hologram {
+            return;
+        }
+
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
@@ -58,6 +66,10 @@ impl INode3D for BeltNode {
     // TODO: because some physics tick can be skipped (when running in sped-up mode, for example), this can cause a desync between world time and tick time
     // easiest fix is to get this to run on a tick basis instead. this *will* give chopped animations...
     fn physics_process(&mut self, _delta: f32) {
+        if self.hologram {
+            return;
+        }
+
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();
@@ -121,6 +133,10 @@ impl INode3D for BeltNode {
     }
 
     fn exit_tree(&mut self) {
+        if self.hologram {
+            return;
+        }
+
         let tree = self.base().get_tree();
         let window = tree.get_root().unwrap();
         let root = window.get_child(0).unwrap();

@@ -4,6 +4,11 @@
 [ext_resource type="Script" uid="uid://cjga1cyx83spp" path="res://player/hover_handler.gd" id="2_rkbax"]
 [ext_resource type="Script" uid="uid://clrqqfwbir381" path="res://player/raycast_handler.gd" id="3_g1dw6"]
 [ext_resource type="Script" uid="uid://gknwpawcagon" path="res://player/actor_handler.gd" id="4_yw30f"]
+[ext_resource type="Script" uid="uid://dis5qfym08ouh" path="res://resources/actor_resource.gd" id="5_qjkh3"]
+[ext_resource type="PackedScene" uid="uid://tutiyjxgw5nq" path="res://actors/machine.tscn" id="6_hg6s5"]
+[ext_resource type="PackedScene" uid="uid://pcr0r0mqngyh" path="res://actors/pole.tscn" id="7_8t03j"]
+[ext_resource type="PackedScene" uid="uid://qtdv0bu8jgh5" path="res://actors/wire.tscn" id="8_2ieo8"]
+[ext_resource type="PackedScene" uid="uid://dtofdrgmekel" path="res://actors/belt.tscn" id="9_ebec5"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_o3jxj"]
 
@@ -12,6 +17,29 @@
 [sub_resource type="SphereMesh" id="SphereMesh_2c62f"]
 radius = 0.05
 height = 0.1
+
+[sub_resource type="Resource" id="Resource_yllr7"]
+script = ExtResource("5_qjkh3")
+scene = ExtResource("6_hg6s5")
+metadata/_custom_type_script = "uid://dis5qfym08ouh"
+
+[sub_resource type="Resource" id="Resource_kb6p2"]
+script = ExtResource("5_qjkh3")
+scene = ExtResource("7_8t03j")
+type = 1
+metadata/_custom_type_script = "uid://dis5qfym08ouh"
+
+[sub_resource type="Resource" id="Resource_wodsf"]
+script = ExtResource("5_qjkh3")
+scene = ExtResource("8_2ieo8")
+type = 2
+metadata/_custom_type_script = "uid://dis5qfym08ouh"
+
+[sub_resource type="Resource" id="Resource_32hag"]
+script = ExtResource("5_qjkh3")
+scene = ExtResource("9_ebec5")
+type = 3
+metadata/_custom_type_script = "uid://dis5qfym08ouh"
 
 [node name="Player" type="CharacterBody3D" unique_id=1284926500 groups=["player"]]
 script = ExtResource("1_oul6g")
@@ -42,3 +70,4 @@ script = ExtResource("3_g1dw6")
 
 [node name="Actor Handler" type="Node3D" parent="." unique_id=1125650754]
 script = ExtResource("4_yw30f")
+actors = Array[ExtResource("5_qjkh3")]([SubResource("Resource_yllr7"), SubResource("Resource_kb6p2"), SubResource("Resource_wodsf"), SubResource("Resource_32hag")])
